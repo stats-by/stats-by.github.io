@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Зарплаты и жильё в Минске — дашборд</title>
+<meta name="description" content="Медианная и средняя зарплата, курс доллара и цена квадратного метра жилья в Минске с 2000 года.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="page">
+
+  <header class="site-header">
+    <h1>Зарплаты и жильё в Минске</h1>
+    <p class="subtitle">Медианная и средняя зарплата, курс доллара и цена квадратного метра — с 2000 года по данным <span id="dataUpTo">…</span></p>
+  </header>
+
+  <main class="dashboard">
+
+    <section class="chart-section">
+
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Валюта</span>
+          <div class="segmented" id="currencyToggle" role="group" aria-label="Валюта">
+            <button type="button" class="segmented-btn is-active" data-value="BYN">BYN</button>
+            <button type="button" class="segmented-btn" data-value="USD">USD</button>
+          </div>
+        </div>
+
+        <div class="toolbar-group">
+          <span class="toolbar-label">Вид</span>
+          <div class="segmented" id="modeToggle" role="group" aria-label="Вид значений">
+            <button type="button" class="segmented-btn is-active" data-value="absolute">Абсолютные</button>
+            <button type="button" class="segmented-btn" data-value="percent">В процентах</button>
+          </div>
+        </div>
+
+        <button type="button" class="btn-reset" id="resetZoom">Показать всю историю</button>
+      </div>
+
+      <div id="chart" class="chart" role="img" aria-label="График зарплат, курса доллара и цены жилья по месяцам"></div>
+      <p class="hint" id="percentHint" hidden>За 100% принят левый край выбранного диапазона — сдвиньте ползунок, чтобы изменить точку отсчёта.</p>
+
+    </section>
+
+    <details class="controls" id="controlsPanel" open>
+      <summary class="controls-summary">Показатели</summary>
+      <div class="controls-body" id="checkboxList"></div>
+    </details>
+
+  </main>
+
+  <footer class="site-footer">
+    <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Разрывы линий на графике означают отсутствие данных за этот месяц, а не нулевое значение.</p>
+  </footer>
+
+</div>
+
+<script src="./echarts.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
