@@ -12,8 +12,7 @@
 <div class="page">
 
   <header class="site-header">
-    <h1>Зарплаты и жильё в Минске</h1>
-    <p class="subtitle">Медианная и средняя зарплата, курс доллара и цена квадратного метра — с 2000 года по данным <span id="dataUpTo">…</span></p>
+  <h1>Зарплаты и жильё в Минске</h1>
   </header>
 
   <main class="dashboard">
@@ -37,7 +36,13 @@
           </div>
         </div>
 
-        <button type="button" class="btn-reset" id="resetZoom">Показать всю историю</button>
+        <div class="zoom-presets" id="zoomPresets" role="group" aria-label="Период графика">
+          <button type="button" class="zoom-preset-btn" data-value="1y">Год</button>
+          <button type="button" class="zoom-preset-btn" data-value="5y">5 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="10y">10 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="15y">15 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="all">Всё время</button>
+        </div>
       </div>
 
       <div id="chart" class="chart" role="img" aria-label="График зарплат, курса доллара и цены жилья по месяцам"></div>
@@ -46,14 +51,17 @@
     </section>
 
     <details class="controls" id="controlsPanel" open>
-      <summary class="controls-summary">Показатели</summary>
+      <summary class="controls-summary">
+        <span>Показатели</span>
+        <button type="button" class="btn-clear" id="clearIndicators">Очистить</button>
+      </summary>
       <div class="controls-body" id="checkboxList"></div>
     </details>
 
   </main>
 
   <footer class="site-footer">
-    <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Разрывы линий на графике означают отсутствие данных за этот месяц, а не нулевое значение.</p>
+    <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Если за отдельный месяц нет данных, соседние доступные точки соединяются напрямую.</p>
   </footer>
 
 </div>

@@ -58,6 +58,23 @@ const state = {
 
   zoomStart: 0,
   zoomEnd: 100,
+
+  /* Последний подтверждённый диапазон dataZoom. */
+  lastZoomStart: 0,
+  lastZoomEnd: 100,
+
+  /* Правая граница, от которой начинается ручной зум. */
+  zoomAnchorEnd: 100,
+
+  /*
+   * Признак именно zoom колесом/gesture.
+   * Нужен для того, чтобы не путать его с физическим
+   * перетаскиванием ручек slider.
+   */
+  wheelZoomAt: 0,
+
+  /* Не даём служебной коррекции dataZoom повторно обработать себя. */
+  correctingZoom: false,
 };
 
 
@@ -887,7 +904,13 @@ function buildCheckboxPanel() {
     checkbox.addEventListener("change", () => {
       state.visible[meta.key] = checkbox.checked;
 
-      render();
+      /*
+       * При любом изменении чекбоксов пользователь начинает новый
+       * просмотр набора показателей, поэтому показываем всю историю
+       * выбранных рядов. Это отличается от самого первого открытия
+       * сайта: при открытии действует стандартный диапазон 10 лет.
+       */
+      setZoomByPreset("all");
     });
 
     const swatch = document.createElement("span");
@@ -913,6 +936,27 @@ function buildCheckboxPanel() {
    Значения по умолчанию
    ============================================================ */
 
+function clearIndicators() {
+  const metas = getSeriesMeta();
+
+  metas.forEach((meta) => {
+    state.visible[meta.key] = false;
+  });
+
+  const checkboxList = document.getElementById("checkboxList");
+
+  if (checkboxList) {
+    checkboxList
+      .querySelectorAll('input[type="checkbox"]')
+      .forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+  }
+
+  render();
+}
+
+
 function initializeVisibility() {
   const metas = getSeriesMeta();
 
@@ -921,65 +965,25 @@ function initializeVisibility() {
   });
 
   /*
-   * V1 default view.
+   * Показатели, выбранные при первом открытии сайта.
+   * Используем ключи из data.json, а не подписи.
    *
-   * Основные показатели:
-   *   - средняя зарплата по стране
-   *   - средняя зарплата Минск
-   *   - минимальная зарплата
+   * По умолчанию:
+   *   - средняя МИНСК
+   *   - средняя ПО СТРАНЕ
    *   - курс USD/BYN
-   *   - цена м² 1-комнатных
    */
+  const defaultKeys = new Set([
+    "средняя_средняя_минск",
+    "средняя_средняя_по_стране",
+    "курс_usd_курс_usd_byn",
+  ]);
 
-  const defaultLabels = [
-    "средняя ПО СТРАНЕ",
-    "средняя МИНСК",
-    "минимальная ПО СТРАНЕ",
-    "курс USD/BYN",
-    "1к",
-  ];
-
-  const defaults = metas.filter((meta) => {
-    const label = String(meta.label || "").trim();
-
-    return defaultLabels.includes(label);
+  metas.forEach((meta) => {
+    if (defaultKeys.has(meta.key)) {
+      state.visible[meta.key] = true;
+    }
   });
-
-  /*
-   * Если точные подписи отличаются, используем
-   * более мягкое определение по ключу.
-   */
-  if (defaults.length === 0) {
-    metas.forEach((meta) => {
-      const key = String(meta.key).toLowerCase();
-
-      if (
-        key.includes("средняя_средняя_по_стране") ||
-        key.includes("средняя_средняя_минск") ||
-        key.includes("мин_зп") ||
-        key.includes("курс_usd") ||
-        key === "realt_м2_1к"
-      ) {
-        state.visible[meta.key] = true;
-      }
-    });
-  } else {
-    defaults.forEach((meta) => {
-      state.visible[meta.key] = true;
-    });
-  }
-
-  /*
-   * Если по какой-либо причине ничего не найдено,
-   * показываем первые несколько рядов.
-   */
-  const hasVisible = Object.values(state.visible).some(Boolean);
-
-  if (!hasVisible && metas.length > 0) {
-    metas.slice(0, Math.min(5, metas.length)).forEach((meta) => {
-      state.visible[meta.key] = true;
-    });
-  }
 }
 
 
@@ -1079,7 +1083,7 @@ function buildSeries() {
       showSymbol: sparse,
       symbolSize: sparse ? 6 : 3,
 
-      connectNulls: false,
+      connectNulls: true,
 
       /*
        * LTTB хорошо подходит для плотных рядов.
@@ -1364,12 +1368,12 @@ function buildOption() {
     },
 
     grid: {
-      left: 56,
-      right: state.mode === "percent" ? 30 : 70,
+      left: state.mode === "percent" ? 34 : 38,
+      right: state.mode === "percent" ? 34 : 38,
       top: 42,
       bottom: 84,
 
-      containLabel: true,
+      containLabel: false,
     },
 
     tooltip: {
@@ -1585,12 +1589,155 @@ function updateDataUpTo() {
 
 
 /* ============================================================
+   Границы данных выбранных рядов
+   ============================================================ */
+
+function getVisibleSeriesBounds() {
+  const months = DATA.months;
+  const metas = getSeriesMeta().filter(
+    (meta) => state.visible[meta.key]
+  );
+
+  if (!metas.length || !months.length) {
+    return null;
+  }
+
+  let minIndex = months.length - 1;
+  let maxIndex = 0;
+  let hasValue = false;
+
+  metas.forEach((meta) => {
+    const values = getSeriesValues(meta);
+
+    values.forEach((value, index) => {
+      if (
+        value == null ||
+        !Number.isFinite(Number(value))
+      ) {
+        return;
+      }
+
+      hasValue = true;
+      minIndex = Math.min(minIndex, index);
+      maxIndex = Math.max(maxIndex, index);
+    });
+  });
+
+  if (!hasValue) {
+    return null;
+  }
+
+  const denominator = Math.max(1, months.length - 1);
+
+  return {
+    start: (minIndex / denominator) * 100,
+    end: (maxIndex / denominator) * 100,
+  };
+}
+
+
+function setZoomByPreset(preset) {
+  const months = DATA.months;
+  const bounds = getVisibleSeriesBounds();
+
+  if (!months.length) {
+    return;
+  }
+
+  const denominator = Math.max(1, months.length - 1);
+
+  if (!bounds) {
+    state.zoomStart = 0;
+    state.zoomEnd = 100;
+  } else if (preset === "all") {
+    state.zoomStart = bounds.start;
+    state.zoomEnd = bounds.end;
+  } else {
+    const periodMonths = {
+      "1y": 12,
+      "5y": 60,
+      "10y": 120,
+      "15y": 180,
+    }[preset];
+
+    if (!periodMonths) {
+      return;
+    }
+
+    const maxIndex = Math.round(
+      (bounds.end / 100) * denominator
+    );
+    const minIndex = Math.round(
+      (bounds.start / 100) * denominator
+    );
+
+    /* Если данных меньше выбранного периода — показываем всё. */
+    const startIndex = Math.max(
+      minIndex,
+      maxIndex - periodMonths + 1
+    );
+
+    state.zoomStart = (startIndex / denominator) * 100;
+    state.zoomEnd = bounds.end;
+  }
+
+  /*
+   * После выбора пресета правая граница становится новой
+   * фиксированной точкой ручного зума.
+   */
+  state.zoomAnchorEnd = state.zoomEnd;
+  state.zoomPreset = preset;
+  state.lastZoomStart = state.zoomStart;
+  state.lastZoomEnd = state.zoomEnd;
+  state.correctingZoom = false;
+
+  updateZoomPresetButtons();
+  render();
+}
+
+
+function updateZoomPresetButtons() {
+  const container = document.getElementById("zoomPresets");
+
+  if (!container) {
+    return;
+  }
+
+  container.querySelectorAll(".zoom-preset-btn").forEach((button) => {
+    button.classList.toggle(
+      "is-active",
+      button.dataset.value === state.zoomPreset
+    );
+  });
+}
+
+
+function fitZoomToVisibleSeries() {
+  const bounds = getVisibleSeriesBounds();
+
+  if (!bounds) {
+    state.zoomStart = 0;
+    state.zoomEnd = 100;
+  } else {
+    state.zoomStart = bounds.start;
+    state.zoomEnd = bounds.end;
+  }
+
+  state.lastZoomStart = state.zoomStart;
+  state.lastZoomEnd = state.zoomEnd;
+}
+
+
+/* ============================================================
    Сброс диапазона
    ============================================================ */
 
 function resetZoom() {
   state.zoomStart = 0;
   state.zoomEnd = 100;
+
+  state.lastZoomStart = 0;
+  state.lastZoomEnd = 100;
 
   render();
 }
@@ -1601,7 +1748,23 @@ function resetZoom() {
    ============================================================ */
 
 function wireDataZoom() {
-  chart.on("dataZoom", () => {
+  /*
+   * ECharts не передаёт в событии dataZoom надёжный признак того,
+   * была ли граница изменена колесом или перетаскиванием ручки.
+   * Поэтому отдельно запоминаем нативное событие wheel.
+   * dataZoom от колеса приходит сразу после него.
+   */
+  if (chart && chart.getZr) {
+    chart.getZr().on("mousewheel", () => {
+      state.wheelZoomAt = Date.now();
+    });
+
+    chart.getZr().on("wheel", () => {
+      state.wheelZoomAt = Date.now();
+    });
+  }
+
+  chart.on("dataZoom", (params) => {
     const option = chart.getOption();
 
     if (
@@ -1614,25 +1777,165 @@ function wireDataZoom() {
 
     const slider = option.dataZoom[0];
 
-    if (slider.start != null) {
-      state.zoomStart = Number(slider.start);
+    let start = Number(slider.start);
+    let end = Number(slider.end);
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      return;
     }
 
-    if (slider.end != null) {
-      state.zoomEnd = Number(slider.end);
+    start = Math.max(0, Math.min(100, start));
+    end = Math.max(0, Math.min(100, end));
+
+    if (end < start) {
+      [start, end] = [end, start];
     }
 
     /*
-     * В процентном режиме база зависит от левого края
-     * выбранного диапазона, поэтому после перемещения
-     * слайдера пересчитываем график.
+     * Служебное второе событие после dispatchAction.
      */
+    if (state.correctingZoom) {
+      state.correctingZoom = false;
+      state.zoomStart = start;
+      state.zoomEnd = end;
+      state.lastZoomStart = start;
+      state.lastZoomEnd = end;
+      state.zoomAnchorEnd = end;
+      updateZoomPresetButtons();
+      return;
+    }
+
+    const previousStart = state.lastZoomStart;
+    const previousEnd = state.lastZoomEnd;
+    const previousWidth = previousEnd - previousStart;
+    const currentWidth = end - start;
+
+    const startChanged =
+      Math.abs(start - previousStart) > 0.000001;
+    const endChanged =
+      Math.abs(end - previousEnd) > 0.000001;
+
+    /*
+     * Колесо определяем по отдельному событию ZRender.
+     * Небольшое окно нужно только для связывания wheel -> dataZoom.
+     */
+    const isWheelZoom =
+      Date.now() - state.wheelZoomAt < 100;
+
+    /*
+     * Любое ручное изменение отменяет подсветку пресета.
+     */
+    state.zoomPreset = null;
+    updateZoomPresetButtons();
+
+    /*
+     * Если это НЕ колесо, значит пользователь физически двигает
+     * ручку slider или весь выделенный диапазон. Такие изменения
+     * принимаем без коррекции.
+     *
+     * Это принципиально важно: правую ручку можно двигать ЛКМ,
+     * но zoom колесом при этом продолжает держать правый край.
+     */
+    if (!isWheelZoom && startChanged && !endChanged) {
+      state.zoomStart = start;
+      state.zoomEnd = previousEnd;
+      state.lastZoomStart = start;
+      state.lastZoomEnd = previousEnd;
+      state.zoomAnchorEnd = previousEnd;
+      return;
+    }
+
+    if (!isWheelZoom && !startChanged && endChanged) {
+      state.zoomStart = previousStart;
+      state.zoomEnd = end;
+      state.lastZoomStart = previousStart;
+      state.lastZoomEnd = end;
+      state.zoomAnchorEnd = end;
+      return;
+    }
+
+    /*
+     * Если обе границы изменились на одинаковую величину,
+     * это перемещение всего выделенного диапазона.
+     * Оставляем его как есть — это не изменение масштаба.
+     */
+    if (
+      !isWheelZoom &&
+      startChanged &&
+      endChanged &&
+      Math.abs(currentWidth - previousWidth) <= 0.000001
+    ) {
+      state.zoomStart = start;
+      state.zoomEnd = end;
+      state.lastZoomStart = start;
+      state.lastZoomEnd = end;
+      state.zoomAnchorEnd = end;
+      return;
+    }
+
+    /*
+     * Обе границы изменились и ширина изменилась — это zoom
+     * колесом мыши / gesture.
+     *
+     * Zoom in:
+     *   правая граница фиксирована;
+     *   двигается только левая.
+     *
+     * Zoom out:
+     *   сначала двигается левая граница влево;
+     *   после достижения 0% начинает двигаться правая.
+     */
+    let correctedStart;
+    let correctedEnd;
+
+    if (currentWidth < previousWidth - 0.000001) {
+      correctedEnd = previousEnd;
+      correctedStart = correctedEnd - currentWidth;
+    } else if (currentWidth > previousWidth + 0.000001) {
+      correctedEnd = previousEnd;
+      correctedStart = correctedEnd - currentWidth;
+
+      if (correctedStart < 0) {
+        correctedStart = 0;
+        correctedEnd = currentWidth;
+      }
+    } else {
+      correctedStart = previousStart;
+      correctedEnd = previousEnd;
+    }
+
+    correctedStart = Math.max(0, Math.min(100, correctedStart));
+    correctedEnd = Math.max(
+      correctedStart,
+      Math.min(100, correctedEnd)
+    );
+
+    const changed =
+      Math.abs(correctedStart - start) > 0.000001 ||
+      Math.abs(correctedEnd - end) > 0.000001;
+
+    state.zoomStart = correctedStart;
+    state.zoomEnd = correctedEnd;
+    state.lastZoomStart = correctedStart;
+    state.lastZoomEnd = correctedEnd;
+    state.zoomAnchorEnd = correctedEnd;
+
+    if (changed) {
+      state.correctingZoom = true;
+
+      chart.dispatchAction({
+        type: "dataZoom",
+        dataZoomIndex: [0, 1],
+        start: correctedStart,
+        end: correctedEnd,
+      });
+    }
+
     if (state.mode === "percent") {
       render();
     }
   });
 }
-
 
 /* ============================================================
    Инициализация
@@ -1650,10 +1953,30 @@ async function init() {
     initializeVisibility();
 
     /*
-     * По умолчанию показываем 2025 -> последняя дата.
+     * По умолчанию показываем последние 10 лет доступных данных
+     * выбранных показателей. Если данных меньше 10 лет,
+     * показываем весь доступный диапазон.
      */
-    state.zoomStart = findDefaultZoomStart();
-    state.zoomEnd = 100;
+    const defaultBounds = getVisibleSeriesBounds();
+
+    if (defaultBounds) {
+      const denominator = Math.max(1, DATA.months.length - 1);
+      const tenYears = (120 / denominator) * 100;
+
+      state.zoomEnd = defaultBounds.end;
+      state.zoomStart = Math.max(
+        defaultBounds.start,
+        state.zoomEnd - tenYears + (100 / denominator)
+      );
+    } else {
+      state.zoomStart = 0;
+      state.zoomEnd = 100;
+    }
+
+    state.lastZoomStart = state.zoomStart;
+    state.lastZoomEnd = state.zoomEnd;
+    state.zoomAnchorEnd = state.zoomEnd;
+    state.zoomPreset = "10y";
 
     /*
      * Информация "данные по..."
@@ -1742,6 +2065,39 @@ async function init() {
         render();
       }
     );
+
+    /*
+     * Быстрые диапазоны графика.
+     */
+    const zoomPresets = document.getElementById("zoomPresets");
+
+    if (zoomPresets) {
+      zoomPresets.querySelectorAll(".zoom-preset-btn").forEach((button) => {
+        button.addEventListener("click", () => {
+          setZoomByPreset(button.dataset.value);
+        });
+      });
+    }
+
+    updateZoomPresetButtons();
+
+    /*
+     * Кнопка "Очистить".
+     *
+     * Кнопка находится внутри <summary>, поэтому явно отменяем
+     * стандартное поведение summary и не даём клику менять
+     * состояние <details>.
+     */
+    const clearButton =
+      document.getElementById("clearIndicators");
+
+    if (clearButton) {
+      clearButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        clearIndicators();
+      });
+    }
 
     /*
      * Кнопка "Показать всю историю".
