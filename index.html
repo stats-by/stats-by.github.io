@@ -17,7 +17,7 @@
 
   <main class="dashboard">
 
-    <section class="chart-section">
+    <section class="chart-section main-chart-section">
 
       <div class="toolbar">
         <div class="toolbar-group">
@@ -50,12 +50,68 @@
 
     </section>
 
-    <details class="controls" id="controlsPanel" open>
+    <details class="controls main-controls" id="controlsPanel" open>
       <summary class="controls-summary">
         <span>Показатели</span>
         <button type="button" class="btn-clear" id="clearIndicators">Очистить</button>
       </summary>
       <div class="controls-body" id="checkboxList"></div>
+    </details>
+
+    <section class="chart-section seasonality-chart-section">
+      <div class="seasonality-header">
+        <h2>Сезонность</h2>
+        <p>Один показатель — отдельная кривая для каждого года.</p>
+      </div>
+
+      <div class="toolbar">
+        <div class="toolbar-group">
+          <span class="toolbar-label">Валюта</span>
+          <div class="segmented" id="seasonalityCurrencyToggle" role="group" aria-label="Валюта сезонности">
+            <button type="button" class="segmented-btn" data-value="BYN">BYN</button>
+            <button type="button" class="segmented-btn is-active" data-value="USD">USD</button>
+          </div>
+        </div>
+
+        <div class="toolbar-group">
+          <span class="toolbar-label">Вид</span>
+          <div class="segmented" id="seasonalityModeToggle" role="group" aria-label="Вид значений сезонности">
+            <button type="button" class="segmented-btn" data-value="absolute">Абсолютные</button>
+            <button type="button" class="segmented-btn is-active" data-value="percent">В процентах</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="seasonalityChart" class="seasonality-chart" role="img" aria-label="График сезонности выбранного показателя по месяцам разных лет"></div>
+
+      <div class="seasonality-year-range" id="seasonalityYearRange" aria-label="Диапазон годов сезонности">
+        <div class="seasonality-range-track">
+          <input type="range" id="seasonalityRangeStart" min="0" max="11" value="0" step="1" aria-label="Начальный месяц">
+          <input type="range" id="seasonalityRangeEnd" min="0" max="11" value="11" step="1" aria-label="Конечный месяц">
+        </div>
+        <div class="seasonality-range-labels">
+          <span id="seasonalityRangeStartLabel">—</span>
+          <span id="seasonalityRangeEndLabel">—</span>
+        </div>
+      </div>
+    </section>
+
+    <details class="controls seasonality-years-controls" id="seasonalityYearsPanel" open>
+      <summary class="controls-summary">
+        <span>Годы</span>
+        <div class="controls-actions">
+          <button type="button" class="btn-clear" id="clearSeasonalityYears">Очистить</button>
+          <button type="button" class="btn-clear" id="selectAllSeasonalityYears">Выбрать все</button>
+        </div>
+      </summary>
+      <div class="controls-body seasonality-years-list" id="seasonalityYearsList"></div>
+    </details>
+
+    <details class="controls seasonality-controls" id="seasonalityControlsPanel" open>
+      <summary class="controls-summary">
+        <span>Показатели</span>
+      </summary>
+      <div class="controls-body" id="seasonalityCheckboxList"></div>
     </details>
 
   </main>

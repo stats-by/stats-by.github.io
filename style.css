@@ -65,6 +65,7 @@ body {
 }
 
 .site-header h1 {
+  text-align: center;
   font-size: 1.9rem;
   font-weight: 700;
   letter-spacing: -0.01em;
@@ -260,14 +261,16 @@ input[type="checkbox"]:focus-visible {
 .controls-body {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 0;
 }
 
 .check-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 7px 4px;
+  gap: 7px;
+  padding: 1px 4px;
+  min-height: 18px;
+  line-height: 1.1;
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
@@ -277,8 +280,8 @@ input[type="checkbox"]:focus-visible {
 }
 
 .check-row input[type="checkbox"] {
-  width: 15px;
-  height: 15px;
+  width: 13px;
+  height: 13px;
   margin: 0;
   flex-shrink: 0;
   cursor: pointer;
@@ -293,19 +296,153 @@ input[type="checkbox"]:focus-visible {
 
 .check-label {
   font-size: 0.87rem;
+  line-height: 1.1;
   color: var(--text-primary);
   user-select: none;
 }
 
 .check-group-label {
   font-size: 0.72rem;
+  line-height: 1.1;
   text-transform: none;
   color: var(--text-tertiary);
-  padding: 14px 4px 4px;
+  padding: 5px 4px 2px;
 }
 
 .check-group-label:first-child {
   padding-top: 4px;
+}
+
+/* ============================================================
+   Seasonality chart
+   ============================================================ */
+.seasonality-chart-section {
+  min-width: 0;
+  padding-bottom: 8px;
+}
+
+.seasonality-header {
+  margin-bottom: 0;
+}
+
+.seasonality-header h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
+}
+
+.seasonality-header p {
+  margin: 4px 0 0;
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.seasonality-chart {
+  width: 100%;
+  height: 520px;
+}
+
+.seasonality-controls {
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 0;
+}
+
+.seasonality-years-controls {
+  grid-column: 1;
+  grid-row: 3;
+  margin-top: 0;
+}
+
+.seasonality-years-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 8px;
+  row-gap: 0;
+}
+
+.seasonality-year-range {
+  position: relative;
+  margin-top: 4px;
+  padding: 0 8px 2px;
+}
+
+.seasonality-range-track {
+  position: relative;
+  height: 24px;
+}
+
+.seasonality-range-track::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 11px;
+  height: 2px;
+  background: var(--border);
+}
+
+.seasonality-range-track::after {
+  content: "";
+  position: absolute;
+  left: var(--range-start, 0%);
+  right: var(--range-end, 0%);
+  top: 11px;
+  height: 2px;
+  background: rgba(61,220,132,0.35);
+  pointer-events: none;
+}
+
+.seasonality-range-track input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+}
+
+.seasonality-range-track input[type="range"]::-webkit-slider-runnable-track {
+  height: 2px;
+  background: transparent;
+}
+
+.seasonality-range-track input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 10px;
+  height: 18px;
+  margin-top: -8px;
+  border: 1px solid var(--text-tertiary);
+  border-radius: 2px;
+  background: var(--bg-panel-raised);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.seasonality-range-track input[type="range"]::-moz-range-track {
+  height: 2px;
+  background: transparent;
+}
+
+.seasonality-range-track input[type="range"]::-moz-range-thumb {
+  width: 10px;
+  height: 18px;
+  border: 1px solid var(--text-tertiary);
+  border-radius: 2px;
+  background: var(--bg-panel-raised);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+
+.seasonality-range-labels {
+  display: flex;
+  justify-content: space-between;
+  color: var(--text-tertiary);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1;
 }
 
 /* ============================================================
@@ -387,6 +524,26 @@ input[type="checkbox"]:focus-visible {
     height: 400px;
   }
 
+  .seasonality-chart-section {
+    padding: 12px 6px 4px;
+  }
+
+  .seasonality-controls,
+  .seasonality-years-controls {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .seasonality-chart {
+    height: 400px;
+  }
+
+  .seasonality-years-list {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(6, 20px);
+    grid-auto-columns: minmax(90px, 1fr);
+  }
+
   .controls-summary {
     cursor: pointer;
     pointer-events: auto;
@@ -444,6 +601,20 @@ input[type="checkbox"]:focus-visible {
     height: 340px;
   }
 
+  .seasonality-chart {
+    height: 340px;
+  }
+
+  .seasonality-years-list {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(6, 20px);
+    grid-auto-columns: minmax(90px, 1fr);
+  }
+
+  .seasonality-header h2 {
+    font-size: 1rem;
+  }
+
   .toolbar-group {
     flex: 1 1 auto;
   }
@@ -464,5 +635,64 @@ input[type="checkbox"]:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+}
+
+/* ============================================================
+   Seasonality years: fill columns top-to-bottom, then left-to-right
+   ============================================================ */
+.controls-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.seasonality-years-list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, 20px);
+  grid-auto-columns: 120px;
+  column-gap: 12px;
+  row-gap: 0;
+  align-items: center;
+  justify-content: start;
+}
+
+/* Годы должны начинаться сразу после графика, без лишнего межблочного зазора. */
+.seasonality-years-controls {
+  margin-top: -20px;
+}
+
+.site-header h1 {
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .seasonality-years-list {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(6, 20px);
+    grid-auto-columns: 110px;
+  }
+
+  .seasonality-years-controls {
+    margin-top: -12px;
+  }
+}
+
+@media (max-width: 520px) {
+  .seasonality-years-list {
+    grid-auto-flow: column;
+    grid-template-rows: repeat(6, 20px);
+    grid-auto-columns: 100px;
+  }
+
+  .controls-actions {
+    gap: 4px;
+  }
+
+  .controls-actions .btn-clear {
+    padding: 4px 7px;
+    font-size: 0.72rem;
   }
 }

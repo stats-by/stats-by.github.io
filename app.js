@@ -100,7 +100,21 @@ const state = {
   currency: "BYN",
   mode: "absolute",
 
+  /* Независимые настройки графика сезонности. */
+  seasonalityCurrency: "USD",
+  seasonalityMode: "percent",
+
   visible: {},
+
+  /* Показатель, выбранный для графика сезонности. */
+  seasonalityKey: "курс_usd_курс_usd_byn",
+
+  /* Годы, отображаемые на графике сезонности. */
+  seasonalityYears: new Set(),
+  seasonalityYearsInitialized: false,
+  seasonalityMonthStart: 0,
+  seasonalityMonthEnd: 11,
+  seasonalityMonthRangeInitialized: false,
 
   zoomStart: 0,
   zoomEnd: 100,
@@ -130,6 +144,7 @@ const state = {
 
 let DATA = null;
 let chart = null;
+let seasonalityChart = null;
 
 const resolvedColors = {};
 
@@ -992,6 +1007,497 @@ function buildCheckboxPanel() {
 
 
 /* ============================================================
+   Панель показателей сезонности
+   ============================================================ */
+
+function clearSeasonalitySelection() {
+  state.seasonalityKey = null;
+  state.seasonalityYears = new Set();
+  state.seasonalityYearsInitialized = false;
+
+  const container = document.getElementById(
+    "seasonalityCheckboxList"
+  );
+
+  if (container) {
+    container
+      .querySelectorAll('input[type="checkbox"]')
+      .forEach((checkbox) => {
+        checkbox.checked = false;
+      });
+  }
+
+  renderSeasonality();
+}
+
+
+function getSeasonalityYears(meta) {
+  if (!meta || isAnnualSeries(meta)) {
+    return [];
+  }
+
+  const values = convertMonthlyValues(meta, state.currency);
+  const years = new Set();
+
+  DATA.months.forEach((key, index) => {
+    const value = values[index];
+
+    if (
+      isYearMonth(key) &&
+      value != null &&
+      Number.isFinite(Number(value))
+    ) {
+      years.add(Number(key.slice(0, 4)));
+    }
+  });
+
+  return Array.from(years).sort((a, b) => a - b);
+}
+
+
+function syncSeasonalityMonthState() {
+  const max = MONTH_NAMES_RU.length - 1;
+
+  if (!state.seasonalityMonthRangeInitialized) {
+    state.seasonalityMonthStart = 0;
+    state.seasonalityMonthEnd = max;
+    state.seasonalityMonthRangeInitialized = true;
+    return;
+  }
+
+  state.seasonalityMonthStart = Math.max(
+    0,
+    Math.min(state.seasonalityMonthStart, max)
+  );
+
+  state.seasonalityMonthEnd = Math.max(
+    state.seasonalityMonthStart,
+    Math.min(state.seasonalityMonthEnd, max)
+  );
+}
+
+
+function updateSeasonalityMonthRange() {
+  syncSeasonalityMonthState();
+
+  const start = document.getElementById("seasonalityRangeStart");
+  const end = document.getElementById("seasonalityRangeEnd");
+  const startLabel = document.getElementById("seasonalityRangeStartLabel");
+  const endLabel = document.getElementById("seasonalityRangeEndLabel");
+
+  if (!start || !end || !startLabel || !endLabel) {
+    return;
+  }
+
+  const max = MONTH_NAMES_RU.length - 1;
+
+  start.max = String(max);
+  end.max = String(max);
+  start.value = String(state.seasonalityMonthStart);
+  end.value = String(state.seasonalityMonthEnd);
+
+  startLabel.textContent = MONTH_NAMES_RU[state.seasonalityMonthStart] || "—";
+  endLabel.textContent = MONTH_NAMES_RU[state.seasonalityMonthEnd] || "—";
+
+  const track = document.querySelector(".seasonality-range-track");
+
+  if (track) {
+    const denominator = Math.max(1, max);
+    track.style.setProperty(
+      "--range-start",
+      `${(state.seasonalityMonthStart / denominator) * 100}%`
+    );
+    track.style.setProperty(
+      "--range-end",
+      `${100 - (state.seasonalityMonthEnd / denominator) * 100}%`
+    );
+  }
+}
+
+
+function buildSeasonalityYearsPanel() {
+  const container = document.getElementById("seasonalityYearsList");
+  const meta = metaByKey(state.seasonalityKey);
+
+  if (!container) {
+    return;
+  }
+
+  const years = getSeasonalityYears(meta);
+  container.innerHTML = "";
+
+  years.forEach((year, index) => {
+    const row = document.createElement("label");
+    row.className = "check-row";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.seasonalityYears.has(year);
+    checkbox.dataset.year = String(year);
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.seasonalityYears.add(year);
+      } else {
+        state.seasonalityYears.delete(year);
+      }
+      renderSeasonality();
+    });
+
+    const swatch = document.createElement("span");
+    swatch.className = "check-swatch";
+    swatch.style.background = SERIES_PALETTE[index % SERIES_PALETTE.length];
+
+    const text = document.createElement("span");
+    text.className = "check-label";
+    text.textContent = String(year);
+
+    row.appendChild(checkbox);
+    row.appendChild(swatch);
+    row.appendChild(text);
+    container.appendChild(row);
+  });
+}
+
+
+function setSeasonalityYears(checked) {
+  const meta = metaByKey(state.seasonalityKey);
+  const years = getSeasonalityYears(meta);
+  state.seasonalityYears = checked ? new Set(years) : new Set();
+  state.seasonalityYearsInitialized = true;
+  buildSeasonalityYearsPanel();
+  renderSeasonality();
+}
+
+
+function buildSeasonalityCheckboxPanel() {
+  const container = document.getElementById("seasonalityCheckboxList");
+
+  if (!container) {
+    return;
+  }
+
+  container.innerHTML = "";
+
+  const metas = sortMetas(getSeriesMeta()).filter(
+    (meta) => getGroupLabel(meta) !== "Строительство"
+  );
+  let currentGroup = null;
+
+  metas.forEach((meta, index) => {
+    const groupLabel = getGroupLabel(meta);
+
+    if (groupLabel !== currentGroup) {
+      currentGroup = groupLabel;
+
+      const groupTitle = document.createElement("div");
+      groupTitle.className = "check-group-label";
+      groupTitle.textContent = groupLabel;
+      container.appendChild(groupTitle);
+    }
+
+    const row = document.createElement("label");
+    row.className = "check-row";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = state.seasonalityKey === meta.key;
+
+    const color = getSeriesColor(meta, index);
+    checkbox.style.accentColor = color;
+
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.seasonalityKey = meta.key;
+        state.seasonalityYears = new Set(getSeasonalityYears(meta));
+        state.seasonalityYearsInitialized = true;
+        state.seasonalityMonthStart = 0;
+        state.seasonalityMonthEnd = 11;
+        state.seasonalityMonthRangeInitialized = false;
+
+        container
+          .querySelectorAll('input[type="checkbox"]')
+          .forEach((other) => {
+            if (other !== checkbox) {
+              other.checked = false;
+            }
+          });
+      } else if (state.seasonalityKey === meta.key) {
+        state.seasonalityKey = null;
+        state.seasonalityYears = new Set();
+        state.seasonalityYearsInitialized = false;
+        state.seasonalityMonthStart = 0;
+        state.seasonalityMonthEnd = 11;
+        state.seasonalityMonthRangeInitialized = false;
+      }
+
+      buildSeasonalityYearsPanel();
+      renderSeasonality();
+    });
+
+    const swatch = document.createElement("span");
+    swatch.className = "check-swatch";
+    swatch.style.background = color;
+
+    const text = document.createElement("span");
+    text.className = "check-label";
+    text.textContent = getSeriesLabel(meta);
+
+    row.appendChild(checkbox);
+    row.appendChild(swatch);
+    row.appendChild(text);
+
+    container.appendChild(row);
+  });
+}
+
+
+function getSeasonalityMonths() {
+  return MONTH_NAMES_RU.map((month) => month.slice(0, 3));
+}
+
+
+function getSeasonalitySeries(meta) {
+  if (!meta || isAnnualSeries(meta)) return [];
+
+  const years = getSeasonalityYears(meta);
+  const visibleYears = new Set(state.seasonalityYears);
+  const values = convertMonthlyValues(meta, state.seasonalityCurrency);
+  const months = DATA.months;
+
+  return years
+    .filter((year) => visibleYears.has(year))
+    .map((year, visibleIndex) => {
+      const data = MONTH_NAMES_RU.map((_, monthIndex) => {
+        if (monthIndex < state.seasonalityMonthStart || monthIndex > state.seasonalityMonthEnd) {
+          return null;
+        }
+
+        const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+        const index = months.indexOf(key);
+
+        if (index < 0) return null;
+
+        const value = values[index];
+        return value == null || !Number.isFinite(Number(value))
+          ? null
+          : Number(value);
+      });
+
+      let seriesData = data;
+
+      if (state.seasonalityMode === "percent") {
+        const reference = data.find(
+          (value) => value != null && Number.isFinite(Number(value))
+        );
+
+        if (reference != null && Number(reference) !== 0) {
+          seriesData = data.map((value) =>
+            value == null ? null : (Number(value) / Number(reference)) * 100
+          );
+        }
+      }
+
+      const originalYearIndex = years.indexOf(year);
+      const color = SERIES_PALETTE[
+        originalYearIndex % SERIES_PALETTE.length
+      ];
+
+      return {
+        id: `seasonality-${meta.key}-${year}`,
+        name: String(year),
+        type: "line",
+        data: seriesData.slice(
+          state.seasonalityMonthStart,
+          state.seasonalityMonthEnd + 1
+        ),
+        connectNulls: true,
+        showSymbol: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { width: 1.5, opacity: 0.8, color },
+        emphasis: { focus: "series", lineStyle: { width: 2.5 } },
+        itemStyle: { color },
+      };
+    });
+}
+
+
+function buildSeasonalityYAxis(meta) {
+  const percentMode = state.seasonalityMode === "percent";
+
+  return {
+    type: "value",
+    position: "left",
+    name: percentMode ? "%" : (isRateSeries(meta) ? "BYN/USD" : getDisplayUnit(meta)),
+    nameTextStyle: { color: "#5B6673" },
+    axisLabel: {
+      color: "#8A97A6",
+      formatter: (value) => formatValue(value, meta, percentMode),
+    },
+    axisLine: { show: false },
+    splitLine: { show: true, lineStyle: { color: "#161C24" } },
+  };
+}
+
+
+function buildSeasonalityOption() {
+  const meta = metaByKey(state.seasonalityKey);
+  syncSeasonalityMonthState();
+  const months = getSeasonalityMonths().slice(
+    state.seasonalityMonthStart,
+    state.seasonalityMonthEnd + 1
+  );
+
+  return {
+    backgroundColor: "transparent",
+    animation: false,
+
+    textStyle: {
+      fontFamily: "var(--font-ui)",
+    },
+
+    grid: {
+      left: state.seasonalityMode === "percent" ? 34 : 38,
+      right: state.seasonalityMode === "percent" ? 34 : 38,
+      top: meta ? 38 : 20,
+      bottom: 46,
+      containLabel: false,
+    },
+
+    tooltip: {
+      trigger: "axis",
+      confine: true,
+      axisPointer: {
+        type: "cross",
+        label: { color: "#000" },
+      },
+      backgroundColor: "#12181F",
+      borderColor: "#232B36",
+      borderWidth: 1,
+      padding: 12,
+      textStyle: {
+        color: "#E8ECF1",
+        fontSize: 12,
+      },
+      extraCssText:
+        "border-radius:8px;" +
+        "box-shadow:0 8px 24px rgba(0,0,0,0.35);",
+      formatter: (params) => {
+        if (!Array.isArray(params) || !params.length) return "";
+
+        let html = `<div style="color:#8A97A6;margin-bottom:6px;">${params[0].axisValue}</div>`;
+
+        params.forEach((param) => {
+          const value = param.value;
+
+          if (value == null || !Number.isFinite(Number(value))) return;
+
+          html += `
+            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
+              <span style="width:8px;height:8px;border-radius:50%;background:${param.color};flex:0 0 8px;"></span>
+              <span style="flex:1;color:#8A97A6;">${param.seriesName}</span>
+              <span style="font-weight:600;margin-left:12px;">${formatValue(value, meta, state.seasonalityMode === "percent")}</span>
+            </div>
+          `;
+        });
+
+        return html;
+      },
+    },
+
+    xAxis: {
+      type: "category",
+      data: months,
+      boundaryGap: false,
+      axisLabel: {
+        color: "#8A97A6",
+        margin: 12,
+      },
+      axisLine: {
+        lineStyle: { color: "#232B36" },
+      },
+      axisTick: { show: false },
+      splitLine: { show: false },
+    },
+
+    yAxis: meta
+      ? buildSeasonalityYAxis(meta)
+      : {
+          type: "value",
+          axisLabel: { color: "#8A97A6" },
+          splitLine: { lineStyle: { color: "#161C24" } },
+        },
+
+    legend: {
+      show: !!meta,
+      type: "scroll",
+      top: 0,
+      left: 0,
+      right: 0,
+      itemWidth: 18,
+      itemHeight: 2,
+      textStyle: {
+        color: "#8A97A6",
+        fontSize: 11,
+      },
+    },
+
+    series: meta ? getSeasonalitySeries(meta) : [],
+  };
+}
+
+
+function renderSeasonality() {
+  if (!seasonalityChart || !DATA) {
+    return;
+  }
+
+  seasonalityChart.setOption(
+    buildSeasonalityOption(),
+    {
+      notMerge: true,
+      lazyUpdate: false,
+    }
+  );
+
+  buildSeasonalityYearsPanel();
+}
+
+
+function wireSeasonalityYearRange() {
+  const start = document.getElementById("seasonalityRangeStart");
+  const end = document.getElementById("seasonalityRangeEnd");
+
+  if (!start || !end) return;
+
+  const apply = (changed) => {
+    syncSeasonalityMonthState();
+
+    let startIndex = Number(start.value);
+    let endIndex = Number(end.value);
+
+    if (changed === "start") {
+      startIndex = Math.min(startIndex, endIndex);
+      start.value = String(startIndex);
+    } else {
+      endIndex = Math.max(endIndex, startIndex);
+      end.value = String(endIndex);
+    }
+
+    state.seasonalityMonthStart = startIndex;
+    state.seasonalityMonthEnd = endIndex;
+    state.seasonalityMonthRangeInitialized = true;
+
+    updateSeasonalityMonthRange();
+    renderSeasonality();
+  };
+
+  start.addEventListener("input", () => apply("start"));
+  end.addEventListener("input", () => apply("end"));
+}
+
+
+/* ============================================================
    Значения по умолчанию
    ============================================================ */
 
@@ -1583,16 +2089,6 @@ function render() {
       lazyUpdate: false,
     }
   );
-
-  /*
-   * Полностью отключаем встроенный ECharts select/brush-to-zoom.
-   * Диапазон dataZoom по-прежнему управляется своим slider.
-   */
-  chart.dispatchAction({
-    type: "takeGlobalCursor",
-    key: "dataZoomSelect",
-    dataZoomSelectActive: false,
-  });
 }
 
 
@@ -1624,6 +2120,14 @@ function wireSegmented(id, onChange) {
   });
 }
 
+
+function syncSegmented(id, value) {
+  const element = document.getElementById(id);
+  if (!element) return;
+  element.querySelectorAll(".segmented-btn").forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.value === value);
+  });
+}
 
 /* ============================================================
    Обновление подсказки процентного режима
@@ -2021,6 +2525,15 @@ async function init() {
      */
     initializeVisibility();
 
+    /* Сезонность по умолчанию: курс USD и все доступные годы. */
+    const defaultSeasonalityMeta = metaByKey(state.seasonalityKey);
+    if (defaultSeasonalityMeta) {
+      state.seasonalityYears = new Set(
+        getSeasonalityYears(defaultSeasonalityMeta)
+      );
+      state.seasonalityYearsInitialized = true;
+    }
+
     /*
      * По умолчанию показываем последние 10 лет доступных данных
      * выбранных показателей. Если данных меньше 10 лет,
@@ -2071,6 +2584,26 @@ async function init() {
       controlsPanel.removeAttribute("open");
     }
 
+    const seasonalityControlsPanel =
+      document.getElementById("seasonalityControlsPanel");
+
+    if (
+      seasonalityControlsPanel &&
+      window.innerWidth < 900
+    ) {
+      seasonalityControlsPanel.removeAttribute("open");
+    }
+
+    const seasonalityYearsPanel =
+      document.getElementById("seasonalityYearsPanel");
+
+    if (
+      seasonalityYearsPanel &&
+      window.innerWidth < 900
+    ) {
+      seasonalityYearsPanel.removeAttribute("open");
+    }
+
     /*
      * Создаём график.
      */
@@ -2099,39 +2632,72 @@ async function init() {
       }
     );
 
+    const seasonalityChartElement =
+      document.getElementById("seasonalityChart");
+
+    if (!seasonalityChartElement) {
+      throw new Error(
+        "Не найден элемент #seasonalityChart в index.html."
+      );
+    }
+
+    seasonalityChart = echarts.init(
+      seasonalityChartElement,
+      null,
+      {
+        renderer: "svg",
+      }
+    );
+
     /*
-     * Панель показателей.
+     * Панели показателей.
      */
     buildCheckboxPanel();
+    buildSeasonalityCheckboxPanel();
+    wireSeasonalityYearRange();
 
     /*
      * Первый рендер.
      */
     render();
+    renderSeasonality();
 
     /*
-     * Переключатель валюты.
+     * Переключатели первого графика.
      */
     wireSegmented(
       "currencyToggle",
       (value) => {
         state.currency = value;
+        render();
+      }
+    );
 
+    wireSegmented(
+      "modeToggle",
+      (value) => {
+        state.mode = value;
+        updatePercentHint();
         render();
       }
     );
 
     /*
-     * Переключатель абсолютное / проценты.
+     * Те же переключатели для блока сезонности.
      */
     wireSegmented(
-      "modeToggle",
+      "seasonalityCurrencyToggle",
       (value) => {
-        state.mode = value;
+        state.seasonalityCurrency = value;
+        renderSeasonality();
+      }
+    );
 
-        updatePercentHint();
-
-        render();
+    wireSegmented(
+      "seasonalityModeToggle",
+      (value) => {
+        state.seasonalityMode = value;
+        renderSeasonality();
       }
     );
 
@@ -2168,6 +2734,27 @@ async function init() {
       });
     }
 
+    const clearSeasonalityYearsButton =
+      document.getElementById("clearSeasonalityYears");
+    const selectAllSeasonalityYearsButton =
+      document.getElementById("selectAllSeasonalityYears");
+
+    if (clearSeasonalityYearsButton) {
+      clearSeasonalityYearsButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSeasonalityYears(false);
+      });
+    }
+
+    if (selectAllSeasonalityYearsButton) {
+      selectAllSeasonalityYearsButton.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSeasonalityYears(true);
+      });
+    }
+
     /*
      * Кнопка "Показать всю историю".
      */
@@ -2194,6 +2781,10 @@ async function init() {
       () => {
         if (chart) {
           chart.resize();
+        }
+
+        if (seasonalityChart) {
+          seasonalityChart.resize();
         }
       }
     );
