@@ -38,11 +38,57 @@ const MONTH_NAMES_RU = [
 const GROUP_ORDER = [
   "Зарплаты",
   "Курс",
-  "Realt",
-  "Wikidom",
-  "Аренда",
   "Строительство",
+  "Аренда",
+  "стоимость квартир Realt",
+  "стоимость квартир Wikidom",
   "Ставка",
+];
+
+/*
+ * Фиксированный порядок показателей внутри групп.
+ * Для зарплат он соответствует порядку в интерфейсе:
+ * медианная страна -> средняя страна -> медианная Минск ->
+ * средняя Минск -> минимальная.
+ */
+const CHECKBOX_ORDER = [
+  // Зарплаты
+  "медианная_беларусь",
+  "средняя_средняя_по_стране",
+  "медианная_минск",
+  "средняя_средняя_минск",
+  "мин_зп_минимальная_по_стране",
+
+  // Курс
+  "курс_usd_курс_usd_byn",
+
+  // Строительство
+  "строительство_год_тыс",
+  "строительство_год",
+
+  // Аренда
+  "аренда_стоимость_аренды_realt",
+  "аренда_стоимость_аренды_t_s_by",
+
+  // стоимость квартир Realt
+  "realt_м2_стоимость_м2_однушек",
+  "realt_м2_стоимость_м2_двушек",
+  "realt_м2_стоимость_м2_трешек",
+  "realt_м2_стоимость_м2_четырешек",
+  "realt_м2_объявления_новостройки",
+  "realt_м2_объявления_вторичка",
+  "realt_м2_объявления_новостройки_вторичка",
+  "realt_сделки_количество_сделок_новостройки_вторичка",
+
+  // стоимость квартир Wikidom
+  "wikidom_м2_стоимость_м2_однушек",
+  "wikidom_м2_стоимость_м2_двушек",
+  "wikidom_м2_стоимость_м2_трешек",
+  "wikidom_м2_стоимость_м2_четырешек",
+  "wikidom_м2_стоимость_м2_общая",
+  "wikidom_сделки_количество_сделок_новостройки_вторичка",
+  "wikidom_сделки_количество_сделок_новостройки",
+  "wikidom_сделки_количество_сделок_вторичка",
 ];
 
 
@@ -173,9 +219,10 @@ function metaByKey(key) {
  */
 function getSeriesColor(meta, index) {
   const cssColorMap = {
+    "медианная_беларусь": "--c-median-country",
     "средняя_средняя_по_стране": "--c-avg-country",
+    "медианная_минск": "--c-avg-minsk",
     "средняя_средняя_минск": "--c-avg-minsk",
-    "мин_зп_минимальная_по_стране": "--c-median-country",
     "курс_usd_курс_usd_byn": "--c-rate",
     "realt_м2_1к": "--c-price-1k",
     "realt_м2_2к": "--c-price-2k",
@@ -210,8 +257,8 @@ function getGroupLabel(meta) {
     const groupMap = {
       salary: "Зарплаты",
       rate: "Курс",
-      realt: "Realt",
-      wikidom: "Wikidom",
+      realt: "стоимость квартир Realt",
+      wikidom: "стоимость квартир Wikidom",
       rent: "Аренда",
       construction: "Строительство",
       refinancing: "Ставка",
@@ -233,11 +280,11 @@ function getGroupLabel(meta) {
   }
 
   if (sheet.includes("realt")) {
-    return "Realt";
+    return "стоимость квартир Realt";
   }
 
   if (sheet.includes("wikidom")) {
-    return "Wikidom";
+    return "стоимость квартир Wikidom";
   }
 
   if (sheet.includes("аренда")) {
@@ -266,8 +313,8 @@ function getInternalGroup(meta) {
     case "Зарплаты":
       return "salary";
 
-    case "Realt":
-    case "Wikidom":
+    case "стоимость квартир Realt":
+    case "стоимость квартир Wikidom":
     case "Аренда":
       return "housing";
 
@@ -851,6 +898,18 @@ function sortMetas(metas) {
 
     if (normalizedA !== normalizedB) {
       return normalizedA - normalizedB;
+    }
+
+    const orderA = CHECKBOX_ORDER.indexOf(a.key);
+    const orderB = CHECKBOX_ORDER.indexOf(b.key);
+
+    if (orderA !== -1 || orderB !== -1) {
+      const normalizedOrderA = orderA === -1 ? 999 : orderA;
+      const normalizedOrderB = orderB === -1 ? 999 : orderB;
+
+      if (normalizedOrderA !== normalizedOrderB) {
+        return normalizedOrderA - normalizedOrderB;
+      }
     }
 
     return String(a.label || a.key).localeCompare(
@@ -1487,20 +1546,35 @@ function buildOption() {
         },
       },
 
-      {
-        type: "inside",
+      /*
+       * На телефоне намеренно НЕ добавляем dataZoom типа "inside".
+       * Иначе ECharts обрабатывает свайпы/жесты непосредственно
+       * по области графика как перемещение или масштабирование.
+       *
+       * На мобильном устройстве единственный способ менять диапазон —
+       * перетаскивать ручки/область выделения нижнего slider.
+       * Сам график остаётся только областью для показа tooltip по тапу.
+       *
+       * На десктопе существующее поведение inside сохраняем.
+       */
+      ...(window.innerWidth >= 900
+        ? [
+            {
+              type: "inside",
 
-        xAxisIndex: 0,
+              xAxisIndex: 0,
 
-        start: state.zoomStart,
-        end: state.zoomEnd,
+              start: state.zoomStart,
+              end: state.zoomEnd,
 
-        zoomOnMouseWheel: true,
+              zoomOnMouseWheel: true,
 
-        moveOnMouseMove: true,
+              moveOnMouseMove: true,
 
-        moveOnMouseWheel: true,
-      },
+              moveOnMouseWheel: true,
+            },
+          ]
+        : []),
     ],
 
     series: buildSeries(),
@@ -1754,7 +1828,7 @@ function wireDataZoom() {
    * Поэтому отдельно запоминаем нативное событие wheel.
    * dataZoom от колеса приходит сразу после него.
    */
-  if (chart && chart.getZr) {
+  if (chart && chart.getZr && window.innerWidth >= 900) {
     chart.getZr().on("mousewheel", () => {
       state.wheelZoomAt = Date.now();
     });
