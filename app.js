@@ -1546,35 +1546,20 @@ function buildOption() {
         },
       },
 
-      /*
-       * На телефоне намеренно НЕ добавляем dataZoom типа "inside".
-       * Иначе ECharts обрабатывает свайпы/жесты непосредственно
-       * по области графика как перемещение или масштабирование.
-       *
-       * На мобильном устройстве единственный способ менять диапазон —
-       * перетаскивать ручки/область выделения нижнего slider.
-       * Сам график остаётся только областью для показа tooltip по тапу.
-       *
-       * На десктопе существующее поведение inside сохраняем.
-       */
-      ...(window.innerWidth >= 900
-        ? [
-            {
-              type: "inside",
+      {
+        type: "inside",
 
-              xAxisIndex: 0,
+        xAxisIndex: 0,
 
-              start: state.zoomStart,
-              end: state.zoomEnd,
+        start: state.zoomStart,
+        end: state.zoomEnd,
 
-              zoomOnMouseWheel: true,
+        zoomOnMouseWheel: true,
 
-              moveOnMouseMove: true,
+        moveOnMouseMove: true,
 
-              moveOnMouseWheel: true,
-            },
-          ]
-        : []),
+        moveOnMouseWheel: true,
+      },
     ],
 
     series: buildSeries(),
@@ -1598,6 +1583,16 @@ function render() {
       lazyUpdate: false,
     }
   );
+
+  /*
+   * Полностью отключаем встроенный ECharts select/brush-to-zoom.
+   * Диапазон dataZoom по-прежнему управляется своим slider.
+   */
+  chart.dispatchAction({
+    type: "takeGlobalCursor",
+    key: "dataZoomSelect",
+    dataZoomSelectActive: false,
+  });
 }
 
 
@@ -1828,7 +1823,7 @@ function wireDataZoom() {
    * Поэтому отдельно запоминаем нативное событие wheel.
    * dataZoom от колеса приходит сразу после него.
    */
-  if (chart && chart.getZr && window.innerWidth >= 900) {
+  if (chart && chart.getZr) {
     chart.getZr().on("mousewheel", () => {
       state.wheelZoomAt = Date.now();
     });
