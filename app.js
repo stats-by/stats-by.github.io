@@ -135,6 +135,10 @@ const state = {
 
   /* Не даём служебной коррекции dataZoom повторно обработать себя. */
   correctingZoom: false,
+
+  /* Активные (подсвеченные) ряды при наведении на линии графиков */
+  hoveredMainSeriesId: null,
+  hoveredSeasonalitySeriesId: null,
 };
 
 
@@ -736,6 +740,190 @@ function getSeriesValues(meta) {
 
 
 /* ============================================================
+   Линейная интерполяция разреженных месячных рядов
+   ============================================================ */
+
+/*
+ * Заполняем только пропуски МЕЖДУ двумя реальными значениями.
+ *
+ * Возвращаем объекты, чтобы ECharts мог отличать:
+ *   isOriginal: true  — исходная точка, на ней показываем маркер;
+ *   isOriginal: false — интерполированное значение, маркера нет.
+ *
+ * Значения до первой и после последней исходной точки не
+ * экстраполируются и остаются null.
+ */
+function interpolateMonthlyValues(values) {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const result = values.map((value) => {
+    const number = Number(value);
+
+    if (value == null || !Number.isFinite(number)) {
+      return null;
+    }
+
+    return {
+      value: number,
+      isOriginal: true,
+    };
+  });
+
+  let previousIndex = -1;
+
+  for (let i = 0; i < values.length; i++) {
+    const current = Number(values[i]);
+
+    if (values[i] == null || !Number.isFinite(current)) {
+      continue;
+    }
+
+    if (previousIndex >= 0 && i - previousIndex > 1) {
+      const previous = Number(values[previousIndex]);
+      const steps = i - previousIndex;
+
+      for (let j = previousIndex + 1; j < i; j++) {
+        const progress = (j - previousIndex) / steps;
+
+        result[j] = {
+          value: previous + (current - previous) * progress,
+          isOriginal: false,
+        };
+      }
+    }
+
+    previousIndex = i;
+  }
+
+  return result;
+}
+
+
+/*
+ * Нормализация в проценты с сохранением признака исходной
+ * точки. Это важно: после интерполяции маркеры должны
+ * оставаться только на фактических наблюдениях.
+ */
+function normalizeSeriesPointsToPercent(points, baseIndex) {
+  if (!Array.isArray(points)) {
+    return [];
+  }
+
+  let reference = null;
+
+  for (let i = baseIndex; i < points.length; i++) {
+    const point = points[i];
+    const value = point && typeof point === "object"
+      ? point.value
+      : point;
+
+    if (value != null && Number.isFinite(Number(value))) {
+      reference = Number(value);
+      break;
+    }
+  }
+
+  if (reference == null) {
+    for (let i = 0; i < points.length; i++) {
+      const point = points[i];
+      const value = point && typeof point === "object"
+        ? point.value
+        : point;
+
+      if (value != null && Number.isFinite(Number(value))) {
+        reference = Number(value);
+        break;
+      }
+    }
+  }
+
+  if (reference == null || reference === 0) {
+    return points.map(() => null);
+  }
+
+  return points.map((point) => {
+    if (point == null) {
+      return null;
+    }
+
+    const value = point && typeof point === "object"
+      ? point.value
+      : point;
+
+    if (value == null || !Number.isFinite(Number(value))) {
+      return null;
+    }
+
+    return {
+      value: (Number(value) / reference) * 100,
+      isOriginal: point && typeof point === "object"
+        ? point.isOriginal !== false
+        : true,
+    };
+  });
+}
+
+
+
+/*
+ * Определяем, действительно ли ряд выходит реже одного раза в месяц.
+ *
+ * В metadata многие ряды имеют frequency:"monthly", даже если
+ * фактические наблюдения публикуются, например, раз в полгода.
+ * Поэтому для отображения маркеров смотрим на реальные даты:
+ * пропуски отдельных месяцев НЕ делают ряд разреженным.
+ */
+function isSparseMonthlySeries(values) {
+  if (!Array.isArray(values)) {
+    return false;
+  }
+
+  const indexes = [];
+
+  for (let i = 0; i < values.length; i++) {
+    const value = values[i];
+
+    if (value == null) {
+      continue;
+    }
+
+    const number = typeof value === "object" && value !== null
+      ? Number(value.value)
+      : Number(value);
+
+    if (Number.isFinite(number)) {
+      indexes.push(i);
+    }
+  }
+
+  if (indexes.length < 2) {
+    return false;
+  }
+
+  const gaps = [];
+
+  for (let i = 1; i < indexes.length; i++) {
+    gaps.push(indexes[i] - indexes[i - 1]);
+  }
+
+  /*
+   * Используем медианный интервал. Поэтому несколько случайно
+   * пропущенных месяцев в ежемесячном ряду не включают маркеры
+   * на всём графике.
+   */
+  gaps.sort((a, b) => a - b);
+
+  const middle = Math.floor(gaps.length / 2);
+  const medianGap = gaps.length % 2
+    ? gaps[middle]
+    : (gaps[middle - 1] + gaps[middle]) / 2;
+
+  return medianGap > 1;
+}
+
+/* ============================================================
    Нормализация в проценты
    ============================================================ */
 
@@ -1011,6 +1199,9 @@ function buildCheckboxPanel() {
    ============================================================ */
 
 function clearSeasonalitySelection() {
+  state.hoveredSeasonalitySeriesId = null;
+  updateTooltipHighlight(document.getElementById("seasonalityChart"), null);
+
   state.seasonalityKey = null;
   state.seasonalityYears = new Set();
   state.seasonalityYearsInitialized = false;
@@ -1283,17 +1474,35 @@ function getSeasonalitySeries(meta) {
           : Number(value);
       });
 
-      let seriesData = data;
+      /*
+       * Для каждой отдельной годовой кривой интерполируем только
+       * пропуски между двумя фактическими наблюдениями этого года.
+       * Через границу года не интерполируем.
+       *
+       * Маркеры нужны только если исходные данные этого года
+       * выходили реже одного раза в месяц. Если показатель
+       * публиковался ежемесячно, линия остаётся без маркеров,
+       * даже если внутри года были отдельные пропуски.
+       */
+      const showOriginalPoints = isSparseMonthlySeries(data);
+      let seriesData = interpolateMonthlyValues(data);
 
       if (state.seasonalityMode === "percent") {
-        const reference = data.find(
-          (value) => value != null && Number.isFinite(Number(value))
+        const referencePoint = seriesData.find(
+          (point) => point != null && Number.isFinite(Number(point.value))
         );
 
-        if (reference != null && Number(reference) !== 0) {
-          seriesData = data.map((value) =>
-            value == null ? null : (Number(value) / Number(reference)) * 100
-          );
+        const reference = referencePoint ? Number(referencePoint.value) : null;
+
+        if (reference != null && reference !== 0) {
+          seriesData = seriesData.map((point) => {
+            if (point == null) return null;
+
+            return {
+              value: (Number(point.value) / reference) * 100,
+              isOriginal: point.isOriginal !== false,
+            };
+          });
         }
       }
 
@@ -1311,9 +1520,24 @@ function getSeasonalitySeries(meta) {
           state.seasonalityMonthEnd + 1
         ),
         connectNulls: true,
-        showSymbol: true,
-        symbol: "circle",
-        symbolSize: 4,
+        showSymbol: showOriginalPoints,
+        showAllSymbol: showOriginalPoints,
+        symbol: showOriginalPoints
+          ? ((value, params) => {
+              const point = params && params.data;
+              return point && point.isOriginal === false
+                ? "none"
+                : "circle";
+            })
+          : "none",
+        symbolSize: showOriginalPoints
+          ? ((value, params) => {
+              const point = params && params.data;
+              return point && point.isOriginal === false ? 0 : 4;
+            })
+          : 0,
+        triggerLineEvent: true,
+        cursor: "pointer",
         lineStyle: { width: 1.5, opacity: 0.8, color },
         emphasis: { focus: "series", lineStyle: { width: 2.5 } },
         itemStyle: { color },
@@ -1337,6 +1561,75 @@ function buildSeasonalityYAxis(meta) {
     axisLine: { show: false },
     splitLine: { show: true, lineStyle: { color: "#161C24" } },
   };
+}
+
+
+function buildSeasonalityTooltipFormatter(params) {
+  if (!Array.isArray(params) || !params.length) return "";
+
+  const meta = metaByKey(state.seasonalityKey);
+  const activeId = state.hoveredSeasonalitySeriesId;
+
+  const validParams = params.filter((param) => {
+    const value = param.value && typeof param.value === "object"
+      ? param.value.value
+      : param.value;
+    return value != null && Number.isFinite(Number(value));
+  });
+
+  if (!validParams.length) return "";
+
+  const hasActive = Boolean(
+    activeId &&
+    validParams.some(
+      (param) => param.seriesId === activeId || param.seriesName === activeId
+    )
+  );
+
+  let html = `
+    <div class="tt-header">
+      <div class="tt-date">${params[0].axisValue}</div>
+    </div>
+    <div class="tt-list ${hasActive ? "has-active" : ""}">
+  `;
+
+  validParams.forEach((param) => {
+    const value = param.value && typeof param.value === "object"
+      ? param.value.value
+      : param.value;
+
+    const isApproximation =
+      param.data &&
+      typeof param.data === "object" &&
+      param.data.isOriginal === false;
+
+    const isActive = Boolean(
+      activeId &&
+      (param.seriesId === activeId || param.seriesName === activeId)
+    );
+
+    const color = param.color || "#3DDC84";
+    const valueText = formatValue(
+      value,
+      meta,
+      state.seasonalityMode === "percent"
+    );
+
+    html += `
+      <div class="tt-row ${isActive ? "is-active" : ""}"
+           data-series-id="${param.seriesId}"
+           data-series-name="${param.seriesName || ""}"
+           style="--row-color:${color};">
+        <span class="tt-bar" style="background:${color};"></span>
+        <span class="tt-dot" style="background:${color};"></span>
+        <span class="tt-name">${param.seriesName}</span>
+        <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+  return html;
 }
 
 
@@ -1381,28 +1674,9 @@ function buildSeasonalityOption() {
       },
       extraCssText:
         "border-radius:8px;" +
-        "box-shadow:0 8px 24px rgba(0,0,0,0.35);",
-      formatter: (params) => {
-        if (!Array.isArray(params) || !params.length) return "";
-
-        let html = `<div style="color:#8A97A6;margin-bottom:6px;">${params[0].axisValue}</div>`;
-
-        params.forEach((param) => {
-          const value = param.value;
-
-          if (value == null || !Number.isFinite(Number(value))) return;
-
-          html += `
-            <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
-              <span style="width:8px;height:8px;border-radius:50%;background:${param.color};flex:0 0 8px;"></span>
-              <span style="flex:1;color:#8A97A6;">${param.seriesName}</span>
-              <span style="font-weight:600;margin-left:12px;">${formatValue(value, meta, state.seasonalityMode === "percent")}</span>
-            </div>
-          `;
-        });
-
-        return html;
-      },
+        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
+        "pointer-events:none;",
+      formatter: buildSeasonalityTooltipFormatter,
     },
 
     xAxis: {
@@ -1461,6 +1735,10 @@ function renderSeasonality() {
   );
 
   buildSeasonalityYearsPanel();
+  updateTooltipHighlight(
+    document.getElementById("seasonalityChart"),
+    state.hoveredSeasonalitySeriesId
+  );
 }
 
 
@@ -1502,6 +1780,9 @@ function wireSeasonalityYearRange() {
    ============================================================ */
 
 function clearIndicators() {
+  state.hoveredMainSeriesId = null;
+  updateTooltipHighlight(document.getElementById("chart"), null);
+
   const metas = getSeriesMeta();
 
   metas.forEach((meta) => {
@@ -1581,6 +1862,242 @@ function findDefaultZoomStart() {
 
 
 /* ============================================================
+   Подсветка активной линии и строки в тултипе
+   ============================================================ */
+
+function updateTooltipHighlight(chartContainer, activeSeriesId) {
+  if (!chartContainer) return;
+  const list = chartContainer.querySelector(".tt-list");
+  if (!list) return;
+
+  const rows = list.querySelectorAll(".tt-row");
+  let anyActive = false;
+
+  rows.forEach((row) => {
+    const rowId = row.dataset.seriesId;
+    const rowName = row.dataset.seriesName;
+    const isActive = Boolean(
+      activeSeriesId && (rowId === activeSeriesId || rowName === activeSeriesId)
+    );
+
+    if (isActive) {
+      anyActive = true;
+      row.classList.add("is-active");
+    } else {
+      row.classList.remove("is-active");
+    }
+  });
+
+  if (anyActive) {
+    list.classList.add("has-active");
+  } else {
+    list.classList.remove("has-active");
+  }
+}
+
+function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
+  if (!chartInstance || !chartElement) return;
+
+  let rafId = null;
+  let lastHoveredId = null;
+
+  function setActiveSeries(seriesId) {
+    if (lastHoveredId === seriesId) return;
+    const prevId = lastHoveredId;
+    lastHoveredId = seriesId;
+
+    if (chartType === "main") {
+      state.hoveredMainSeriesId = seriesId;
+    } else {
+      state.hoveredSeasonalitySeriesId = seriesId;
+    }
+
+    // Мгновенно обновляем классы в открытом тултипе без его перемещения
+    updateTooltipHighlight(chartElement, seriesId);
+
+    // Подсвечиваем линию на самом графике
+    try {
+      if (prevId) {
+        chartInstance.dispatchAction({
+          type: "downplay",
+          seriesId: prevId,
+        });
+      }
+      if (seriesId) {
+        chartInstance.dispatchAction({
+          type: "highlight",
+          seriesId: seriesId,
+        });
+      } else {
+        chartInstance.dispatchAction({
+          type: "downplay",
+        });
+      }
+    } catch (e) {
+      // Игнорируем некритичные исключения ECharts
+    }
+  }
+
+  // Нативное событие наведения ECharts на элемент ряда
+  chartInstance.on("mouseover", (params) => {
+    if (params && params.componentType === "series") {
+      const id = params.seriesId || params.seriesName;
+      if (id) {
+        setActiveSeries(id);
+      }
+    }
+  });
+
+  // Расчёт приближения курсора к линиям на графике (допуск ~24px для лёгкого считывания)
+  if (chartInstance.getZr) {
+    chartInstance.getZr().on("mousemove", (e) => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+      }
+
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+
+        const x = e.offsetX;
+        const y = e.offsetY;
+
+        if (
+          typeof chartInstance.containPixel === "function" &&
+          !chartInstance.containPixel({ gridIndex: 0 }, [x, y])
+        ) {
+          setActiveSeries(null);
+          return;
+        }
+
+        const option = chartInstance.getOption();
+        if (!option || !Array.isArray(option.series) || !option.series.length) {
+          setActiveSeries(null);
+          return;
+        }
+
+        let coord;
+        try {
+          coord = chartInstance.convertFromPixel({ gridIndex: 0 }, [x, y]);
+        } catch (err) {
+          return;
+        }
+
+        if (!coord || !Number.isFinite(coord[0])) {
+          setActiveSeries(null);
+          return;
+        }
+
+        const dataX = coord[0];
+        const THRESHOLD = 24; // пикселей по вертикали для комфортного попадания
+        const HYSTERESIS = 4; // гистерезис против мерцания при близких/пересекающихся линиях
+
+        let minDistance = Infinity;
+        let bestSeriesId = null;
+        let activeSeriesDistance = Infinity;
+
+        option.series.forEach((seriesItem, sIdx) => {
+          if (!seriesItem || !Array.isArray(seriesItem.data)) return;
+
+          const data = seriesItem.data;
+          const len = data.length;
+          if (len === 0) return;
+
+          const idx0 = Math.max(0, Math.min(len - 1, Math.floor(dataX)));
+          const idx1 = Math.max(0, Math.min(len - 1, Math.ceil(dataX)));
+
+          const extractVal = (item) => {
+            if (item == null) return null;
+            if (typeof item === "object") {
+              return item.value != null && Number.isFinite(Number(item.value))
+                ? Number(item.value)
+                : null;
+            }
+            return Number.isFinite(Number(item)) ? Number(item) : null;
+          };
+
+          const v0 = extractVal(data[idx0]);
+          const v1 = extractVal(data[idx1]);
+
+          if (v0 == null && v1 == null) return;
+
+          let vInterp;
+          if (v0 == null) {
+            vInterp = v1;
+          } else if (v1 == null) {
+            vInterp = v0;
+          } else if (idx0 === idx1) {
+            vInterp = v0;
+          } else {
+            const frac = dataX - idx0;
+            vInterp = v0 + (v1 - v0) * frac;
+          }
+
+          let pixel;
+          try {
+            pixel = chartInstance.convertToPixel(
+              { seriesIndex: sIdx },
+              [dataX, vInterp]
+            );
+          } catch (err) {
+            return;
+          }
+
+          if (!pixel || !Number.isFinite(pixel[1])) return;
+
+          const dist = Math.abs(y - pixel[1]);
+          const sId = seriesItem.id || seriesItem.name;
+
+          if (sId === lastHoveredId) {
+            activeSeriesDistance = dist;
+          }
+
+          if (dist < minDistance) {
+            minDistance = dist;
+            bestSeriesId = sId;
+          }
+        });
+
+        // Если ранее подсвеченная линия ещё близка к курсору — сохраняем её
+        if (
+          lastHoveredId &&
+          activeSeriesDistance <= THRESHOLD &&
+          activeSeriesDistance <= minDistance + HYSTERESIS
+        ) {
+          return;
+        }
+
+        if (minDistance <= THRESHOLD && bestSeriesId) {
+          setActiveSeries(bestSeriesId);
+        } else {
+          setActiveSeries(null);
+        }
+      });
+    });
+
+    chartInstance.getZr().on("globalout", () => {
+      if (rafId) {
+        cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      setActiveSeries(null);
+    });
+  }
+
+  chartElement.addEventListener("mouseleave", () => {
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+    setActiveSeries(null);
+  });
+
+  chartInstance.on("hideTip", () => {
+    setActiveSeries(null);
+  });
+}
+
+
+/* ============================================================
    Построение линий
    ============================================================ */
 
@@ -1598,10 +2115,24 @@ function buildSeries() {
   );
 
   return visibleMetas.map((meta) => {
-    let values = getSeriesValues(meta);
+    const rawValues = getSeriesValues(meta);
+    const shouldInterpolate = !isAnnualSeries(meta);
+
+    let values = shouldInterpolate
+      ? interpolateMonthlyValues(rawValues)
+      : rawValues.map((value) => {
+          if (value == null || !Number.isFinite(Number(value))) {
+            return null;
+          }
+
+          return {
+            value: Number(value),
+            isOriginal: true,
+          };
+        });
 
     if (state.mode === "percent") {
-      values = normalizeToPercent(values, baseIndex);
+      values = normalizeSeriesPointsToPercent(values, baseIndex);
     }
 
     const metaIndex = metas.indexOf(meta);
@@ -1632,9 +2163,20 @@ function buildSeries() {
       }
     }
 
-    const sparse = values.filter(
-      (value) => value != null
-    ).length < Math.max(60, months.length * 0.35);
+    /*
+     * Маркеры показываем только на рядах, которые фактически
+     * публикуются реже одного раза в месяц.
+     *
+     * Важно: пропуск одного/нескольких месяцев в обычном
+     * ежемесячном ряду НЕ превращает его в точечный график.
+     */
+    const showOriginalPoints =
+      isAnnualSeries(meta) ||
+      isSparseMonthlySeries(rawValues);
+
+    const hasInterpolatedValues = values.some(
+      (point) => point && point.isOriginal === false
+    );
 
     return {
       id: meta.key,
@@ -1645,16 +2187,39 @@ function buildSeries() {
 
       yAxisIndex,
 
-      showSymbol: sparse,
-      symbolSize: sparse ? 6 : 3,
+      /*
+       * Маркер определяется для КАЖДОЙ точки отдельно.
+       * Поэтому при любом диапазоне видны все реальные
+       * наблюдения, а интерполированные точки маркера не имеют.
+       */
+      showSymbol: showOriginalPoints,
+      showAllSymbol: showOriginalPoints,
+      symbol: showOriginalPoints
+        ? ((value, params) => {
+            const point = params && params.data;
+            return point && point.isOriginal === false
+              ? "none"
+              : "circle";
+          })
+        : "none",
+      symbolSize: showOriginalPoints
+        ? ((value, params) => {
+            const point = params && params.data;
+            return point && point.isOriginal === false ? 0 : 6;
+          })
+        : 0,
 
       connectNulls: true,
 
       /*
-       * LTTB хорошо подходит для плотных рядов.
-       * Для sparse-рядов оставляем исходные точки.
+       * LTTB отключаем для рядов с интерполяцией: sampling
+       * может выбрасывать исходные точки, из-за чего количество
+       * видимых маркеров становилось неправильным.
        */
-      sampling: sparse ? undefined : "lttb",
+      sampling: hasInterpolatedValues ? undefined : "lttb",
+
+      triggerLineEvent: true,
+      cursor: "pointer",
 
       lineStyle: {
         color,
@@ -1667,6 +2232,9 @@ function buildSeries() {
 
       emphasis: {
         focus: "series",
+        lineStyle: {
+          width: 3,
+        },
       },
 
       z: (
@@ -1834,35 +2402,52 @@ function buildTooltipFormatter(params) {
   }
 
   const first = params[0];
-
   const dataIndex = first.dataIndex;
-
   const month = DATA.months[dataIndex];
 
+  const activeId = state.hoveredMainSeriesId;
+
+  const validParams = params.filter((param) => {
+    const meta = metaByKey(param.seriesId);
+    if (!meta) {
+      return false;
+    }
+
+    const rawValue = param.value && typeof param.value === "object"
+      ? param.value.value
+      : param.value;
+
+    return rawValue != null && Number.isFinite(Number(rawValue));
+  });
+
+  if (!validParams.length) {
+    return "";
+  }
+
+  const hasActive = Boolean(
+    activeId &&
+    validParams.some(
+      (param) => param.seriesId === activeId || param.seriesName === activeId
+    )
+  );
+
   let html = `
-    <div style="
-      font-weight:600;
-      margin-bottom:8px;
-    ">
-      ${fmtMonthRu(month)}
+    <div class="tt-header">
+      <div class="tt-date">${fmtMonthRu(month)}</div>
     </div>
+    <div class="tt-list ${hasActive ? "has-active" : ""}">
   `;
 
-  params.forEach((param) => {
+  validParams.forEach((param) => {
     const meta = metaByKey(param.seriesId);
+    const rawValue = param.value && typeof param.value === "object"
+      ? param.value.value
+      : param.value;
 
-    if (!meta) {
-      return;
-    }
-
-    const rawValue = param.value;
-
-    if (
-      rawValue == null ||
-      !Number.isFinite(Number(rawValue))
-    ) {
-      return;
-    }
+    const isApproximation =
+      param.data &&
+      typeof param.data === "object" &&
+      param.data.isOriginal === false;
 
     const color =
       param.color ||
@@ -1877,38 +2462,25 @@ function buildTooltipFormatter(params) {
       state.mode === "percent"
     );
 
+    const isActive = Boolean(
+      activeId &&
+      (param.seriesId === activeId || param.seriesName === activeId)
+    );
+
     html += `
-      <div style="
-        display:flex;
-        align-items:center;
-        gap:8px;
-        margin-top:4px;
-      ">
-        <span style="
-          width:8px;
-          height:8px;
-          border-radius:50%;
-          background:${color};
-          flex:0 0 8px;
-        "></span>
-
-        <span style="
-          flex:1;
-          color:#8A97A6;
-        ">
-          ${getSeriesLabel(meta)}
-        </span>
-
-        <span style="
-          font-weight:600;
-          margin-left:12px;
-        ">
-          ${valueText}
-        </span>
+      <div class="tt-row ${isActive ? "is-active" : ""}"
+           data-series-id="${param.seriesId}"
+           data-series-name="${param.seriesName || ""}"
+           style="--row-color:${color};">
+        <span class="tt-bar" style="background:${color};"></span>
+        <span class="tt-dot" style="background:${color};"></span>
+        <span class="tt-name">${getSeriesLabel(meta)}</span>
+        <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
       </div>
     `;
   });
 
+  html += `</div>`;
   return html;
 }
 
@@ -1968,7 +2540,8 @@ function buildOption() {
 
       extraCssText:
         "border-radius:8px;" +
-        "box-shadow:0 8px 24px rgba(0,0,0,0.35);",
+        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
+        "pointer-events:none;",
 
       formatter: buildTooltipFormatter,
     },
@@ -2089,6 +2662,11 @@ function render() {
       lazyUpdate: false,
     }
   );
+
+  updateTooltipHighlight(
+    document.getElementById("chart"),
+    state.hoveredMainSeriesId
+  );
 }
 
 
@@ -2127,6 +2705,282 @@ function syncSegmented(id, value) {
   element.querySelectorAll(".segmented-btn").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.value === value);
   });
+}
+
+
+/* ============================================================
+   Deep Linking
+   ============================================================ */
+
+function parseDeepLinkList(value) {
+  if (!value) {
+    return [];
+  }
+
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+
+function getMonthFromZoomPercent(percent) {
+  if (!DATA || !Array.isArray(DATA.months) || !DATA.months.length) {
+    return null;
+  }
+
+  const denominator = Math.max(1, DATA.months.length - 1);
+  const index = Math.max(0, Math.min(denominator, Math.round((Number(percent) / 100) * denominator)));
+
+  return DATA.months[index] || null;
+}
+
+
+function getZoomPercentFromMonth(month) {
+  if (!DATA || !Array.isArray(DATA.months) || DATA.months.length < 2) {
+    return null;
+  }
+
+  const index = DATA.months.indexOf(month);
+
+  if (index < 0) {
+    return null;
+  }
+
+  return (index / (DATA.months.length - 1)) * 100;
+}
+
+
+function buildDeepLinkUrl(source) {
+  const url = new URL(window.location.href);
+  const params = new URLSearchParams();
+
+  params.set("g", source === "seasonality" ? "2" : "1");
+
+  if (source === "seasonality") {
+    params.set("s", state.seasonalityKey || "");
+    params.set(
+      "y",
+      Array.from(state.seasonalityYears)
+        .sort((a, b) => a - b)
+        .join(",")
+    );
+    params.set("c", state.seasonalityCurrency);
+    params.set("m", state.seasonalityMode);
+    params.set(
+      "r",
+      `${state.seasonalityMonthStart},${state.seasonalityMonthEnd}`
+    );
+  } else {
+    params.set(
+      "i",
+      getSeriesMeta()
+        .filter((meta) => state.visible[meta.key])
+        .map((meta) => meta.key)
+        .join(",")
+    );
+    params.set("c", state.currency);
+    params.set("m", state.mode);
+
+    const startMonth = getMonthFromZoomPercent(state.zoomStart);
+    const endMonth = getMonthFromZoomPercent(state.zoomEnd);
+
+    if (startMonth && endMonth) {
+      params.set("z", `${startMonth},${endMonth}`);
+    }
+  }
+
+  url.search = params.toString();
+  return url.toString();
+}
+
+
+function setShareButtonIcon(button, copied) {
+  if (!button) {
+    return;
+  }
+
+  button.innerHTML = copied
+    ? `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4L19 6"></path></svg>`
+    : `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path></svg>`;
+
+  button.setAttribute(
+    "aria-label",
+    copied ? "Ссылка скопирована" : button.dataset.defaultAriaLabel
+  );
+}
+
+
+async function copyDeepLink(source, button) {
+  const url = buildDeepLinkUrl(source);
+
+  try {
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+      await navigator.clipboard.writeText(url);
+    } else {
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      const copied = document.execCommand("copy");
+      textarea.remove();
+
+      if (!copied) {
+        throw new Error("Не удалось скопировать ссылку в буфер обмена.");
+      }
+    }
+
+    setShareButtonIcon(button, true);
+
+    if (button._deepLinkTimer) {
+      clearTimeout(button._deepLinkTimer);
+    }
+
+    button._deepLinkTimer = setTimeout(() => {
+      setShareButtonIcon(button, false);
+      button._deepLinkTimer = null;
+    }, 3000);
+  } catch (error) {
+    console.error("Не удалось скопировать Deep Link:", error);
+  }
+}
+
+
+function wireDeepLinkButton(id, source) {
+  const button = document.getElementById(id);
+
+  if (!button) {
+    return;
+  }
+
+  button.dataset.defaultAriaLabel = button.getAttribute("aria-label") || "Скопировать ссылку";
+
+  button.addEventListener("click", () => {
+    copyDeepLink(source, button);
+  });
+}
+
+
+function restoreDeepLinkState() {
+  const params = new URLSearchParams(window.location.search);
+  const source = params.get("g");
+
+  if (source === "1") {
+    const validKeys = new Set(getSeriesMeta().map((meta) => meta.key));
+    const keys = parseDeepLinkList(params.get("i"));
+
+    getSeriesMeta().forEach((meta) => {
+      state.visible[meta.key] = false;
+    });
+
+    keys.forEach((key) => {
+      if (validKeys.has(key)) {
+        state.visible[key] = true;
+      }
+    });
+
+    const currency = params.get("c");
+    const mode = params.get("m");
+
+    if (currency === "BYN" || currency === "USD") {
+      state.currency = currency;
+    }
+
+    if (mode === "absolute" || mode === "percent") {
+      state.mode = mode;
+    }
+
+    const range = parseDeepLinkList(params.get("z"));
+    const startPercent = getZoomPercentFromMonth(range[0]);
+    const endPercent = getZoomPercentFromMonth(range[1]);
+
+    if (startPercent != null && endPercent != null) {
+      state.zoomStart = Math.min(startPercent, endPercent);
+      state.zoomEnd = Math.max(startPercent, endPercent);
+    }
+
+    state.lastZoomStart = state.zoomStart;
+    state.lastZoomEnd = state.zoomEnd;
+    state.zoomAnchorEnd = state.zoomEnd;
+    state.zoomPreset = null;
+
+    syncSegmented("currencyToggle", state.currency);
+    syncSegmented("modeToggle", state.mode);
+
+    return "main";
+  }
+
+  if (source === "2") {
+    const validKeys = new Set(
+      getSeriesMeta()
+        .filter((meta) => getGroupLabel(meta) !== "Строительство")
+        .map((meta) => meta.key)
+    );
+    const seasonalityKey = params.get("s");
+
+    if (seasonalityKey && validKeys.has(seasonalityKey)) {
+      state.seasonalityKey = seasonalityKey;
+    } else if (seasonalityKey === "") {
+      state.seasonalityKey = null;
+    }
+
+    const currency = params.get("c");
+    const mode = params.get("m");
+
+    if (currency === "BYN" || currency === "USD") {
+      state.seasonalityCurrency = currency;
+    }
+
+    if (mode === "absolute" || mode === "percent") {
+      state.seasonalityMode = mode;
+    }
+
+    const meta = metaByKey(state.seasonalityKey);
+    const availableYears = new Set(getSeasonalityYears(meta));
+    const years = parseDeepLinkList(params.get("y"))
+      .map((year) => Number(year))
+      .filter((year) => Number.isInteger(year) && availableYears.has(year));
+
+    state.seasonalityYears = new Set(years);
+    state.seasonalityYearsInitialized = true;
+
+    const range = parseDeepLinkList(params.get("r"))
+      .map((value) => Number(value));
+
+    if (range.length === 2 && range.every((value) => Number.isInteger(value))) {
+      state.seasonalityMonthStart = Math.max(0, Math.min(11, range[0]));
+      state.seasonalityMonthEnd = Math.max(
+        state.seasonalityMonthStart,
+        Math.min(11, range[1])
+      );
+      state.seasonalityMonthRangeInitialized = true;
+    }
+
+    syncSegmented("seasonalityCurrencyToggle", state.seasonalityCurrency);
+    syncSegmented("seasonalityModeToggle", state.seasonalityMode);
+
+    return "seasonality";
+  }
+
+  return null;
+}
+
+
+function focusDeepLinkSource(source) {
+  if (source !== "seasonality") {
+    return;
+  }
+
+  const section = document.querySelector(".seasonality-chart-section");
+
+  if (section) {
+    requestAnimationFrame(() => {
+      section.scrollIntoView({ block: "start", behavior: "auto" });
+    });
+  }
 }
 
 /* ============================================================
@@ -2263,6 +3117,8 @@ function setZoomByPreset(preset) {
   state.lastZoomStart = state.zoomStart;
   state.lastZoomEnd = state.zoomEnd;
   state.correctingZoom = false;
+  state.hoveredMainSeriesId = null;
+  updateTooltipHighlight(document.getElementById("chart"), null);
 
   updateZoomPresetButtons();
   render();
@@ -2306,6 +3162,9 @@ function fitZoomToVisibleSeries() {
    ============================================================ */
 
 function resetZoom() {
+  state.hoveredMainSeriesId = null;
+  updateTooltipHighlight(document.getElementById("chart"), null);
+
   state.zoomStart = 0;
   state.zoomEnd = 100;
 
@@ -2535,30 +3394,38 @@ async function init() {
     }
 
     /*
+     * Если ссылка содержит Deep Link — восстанавливаем состояние
+     * только того графика, который был источником ссылки.
+     */
+    const deepLinkSource = restoreDeepLinkState();
+
+    /*
      * По умолчанию показываем последние 10 лет доступных данных
      * выбранных показателей. Если данных меньше 10 лет,
      * показываем весь доступный диапазон.
      */
-    const defaultBounds = getVisibleSeriesBounds();
+    if (deepLinkSource !== "main") {
+      const defaultBounds = getVisibleSeriesBounds();
 
-    if (defaultBounds) {
-      const denominator = Math.max(1, DATA.months.length - 1);
-      const tenYears = (120 / denominator) * 100;
+      if (defaultBounds) {
+        const denominator = Math.max(1, DATA.months.length - 1);
+        const tenYears = (120 / denominator) * 100;
 
-      state.zoomEnd = defaultBounds.end;
-      state.zoomStart = Math.max(
-        defaultBounds.start,
-        state.zoomEnd - tenYears + (100 / denominator)
-      );
-    } else {
-      state.zoomStart = 0;
-      state.zoomEnd = 100;
+        state.zoomEnd = defaultBounds.end;
+        state.zoomStart = Math.max(
+          defaultBounds.start,
+          state.zoomEnd - tenYears + (100 / denominator)
+        );
+      } else {
+        state.zoomStart = 0;
+        state.zoomEnd = 100;
+      }
+
+      state.lastZoomStart = state.zoomStart;
+      state.lastZoomEnd = state.zoomEnd;
+      state.zoomAnchorEnd = state.zoomEnd;
+      state.zoomPreset = "10y";
     }
-
-    state.lastZoomStart = state.zoomStart;
-    state.lastZoomEnd = state.zoomEnd;
-    state.zoomAnchorEnd = state.zoomEnd;
-    state.zoomPreset = "10y";
 
     /*
      * Информация "данные по..."
@@ -2663,6 +3530,16 @@ async function init() {
     renderSeasonality();
 
     /*
+     * Подключение подсветки линий и соответствующих строк в тултипе.
+     */
+    attachLineHoverHighlight(chart, chartElement, "main");
+    attachLineHoverHighlight(
+      seasonalityChart,
+      seasonalityChartElement,
+      "seasonality"
+    );
+
+    /*
      * Переключатели первого графика.
      */
     wireSegmented(
@@ -2700,6 +3577,12 @@ async function init() {
         renderSeasonality();
       }
     );
+
+    /*
+     * Кнопки Deep Link.
+     */
+    wireDeepLinkButton("shareMainChart", "main");
+    wireDeepLinkButton("shareSeasonalityChart", "seasonality");
 
     /*
      * Быстрые диапазоны графика.
@@ -2788,6 +3671,8 @@ async function init() {
         }
       }
     );
+
+    focusDeepLinkSource(deepLinkSource);
 
     /*
      * Небольшая диагностическая информация
