@@ -1682,6 +1682,9 @@ function buildSeasonalityOption() {
 
         minValueSpan: 1,
 
+        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
+        brushSelect: false,
+
         height: 24,
 
         bottom: 30,
