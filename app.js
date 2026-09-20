@@ -17,6 +17,21 @@
 
 
 /* ============================================================
+   Сенсорные устройства (телефон / планшет)
+   ============================================================
+   На тач-экранах зум и перемещение графика возможны ТОЛЬКО через
+   нижний ползунок (slider). Касание графика лишь показывает
+   всплывающее окно. На компьютере (мышь) поведение не меняется.
+   ============================================================ */
+
+const IS_TOUCH = !!(
+  window.matchMedia &&
+  window.matchMedia("(pointer: coarse)").matches
+);
+
+
+
+/* ============================================================
    Константы
    ============================================================ */
 
@@ -1915,6 +1930,12 @@ function updateTooltipHighlight(chartContainer, activeSeriesId) {
 function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   if (!chartInstance || !chartElement) return;
 
+  /*
+   * На тач-экране касание графика только показывает тултип:
+   * подсветку отдельных линий не включаем.
+   */
+  if (IS_TOUCH) return;
+
   let rafId = null;
   let lastHoveredId = null;
 
@@ -2663,20 +2684,29 @@ function buildOption() {
         },
       },
 
-      {
-        type: "inside",
+      /*
+       * "inside" (колесо / перетаскивание / pinch по самому графику)
+       * подключаем только на устройствах с мышью. На тач-экране
+       * управление диапазоном — только нижним ползунком.
+       */
+      ...(IS_TOUCH
+        ? []
+        : [
+            {
+              type: "inside",
 
-        xAxisIndex: 0,
+              xAxisIndex: 0,
 
-        start: state.zoomStart,
-        end: state.zoomEnd,
+              start: state.zoomStart,
+              end: state.zoomEnd,
 
-        zoomOnMouseWheel: true,
+              zoomOnMouseWheel: true,
 
-        moveOnMouseMove: true,
+              moveOnMouseMove: true,
 
-        moveOnMouseWheel: true,
-      },
+              moveOnMouseWheel: true,
+            },
+          ]),
     ],
 
     series: buildSeries(),
@@ -3299,6 +3329,19 @@ function wireDataZoom() {
     updateZoomPresetButtons();
 
     /*
+     * На тач-экране диапазон меняется только нижним ползунком
+     * (ручки или перетаскивание всего окна) — принимаем как есть.
+     */
+    if (IS_TOUCH) {
+      state.zoomStart = start;
+      state.zoomEnd = end;
+      state.lastZoomStart = start;
+      state.lastZoomEnd = end;
+      state.zoomAnchorEnd = end;
+      return;
+    }
+
+    /*
      * Если это НЕ колесо, значит пользователь физически двигает
      * ручку slider или весь выделенный диапазон. Такие изменения
      * принимаем без коррекции.
@@ -3395,7 +3438,7 @@ function wireDataZoom() {
 
       chart.dispatchAction({
         type: "dataZoom",
-        dataZoomIndex: [0, 1],
+        dataZoomIndex: IS_TOUCH ? [0] : [0, 1],
         start: correctedStart,
         end: correctedEnd,
       });
