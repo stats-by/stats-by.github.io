@@ -1268,44 +1268,6 @@ function syncSeasonalityMonthState() {
 }
 
 
-function updateSeasonalityMonthRange() {
-  syncSeasonalityMonthState();
-
-  const start = document.getElementById("seasonalityRangeStart");
-  const end = document.getElementById("seasonalityRangeEnd");
-  const startLabel = document.getElementById("seasonalityRangeStartLabel");
-  const endLabel = document.getElementById("seasonalityRangeEndLabel");
-
-  if (!start || !end || !startLabel || !endLabel) {
-    return;
-  }
-
-  const max = MONTH_NAMES_RU.length - 1;
-
-  start.max = String(max);
-  end.max = String(max);
-  start.value = String(state.seasonalityMonthStart);
-  end.value = String(state.seasonalityMonthEnd);
-
-  startLabel.textContent = MONTH_NAMES_RU[state.seasonalityMonthStart] || "—";
-  endLabel.textContent = MONTH_NAMES_RU[state.seasonalityMonthEnd] || "—";
-
-  const track = document.querySelector(".seasonality-range-track");
-
-  if (track) {
-    const denominator = Math.max(1, max);
-    track.style.setProperty(
-      "--range-start",
-      `${(state.seasonalityMonthStart / denominator) * 100}%`
-    );
-    track.style.setProperty(
-      "--range-end",
-      `${100 - (state.seasonalityMonthEnd / denominator) * 100}%`
-    );
-  }
-}
-
-
 function buildSeasonalityYearsPanel() {
   const container = document.getElementById("seasonalityYearsList");
   const meta = metaByKey(state.seasonalityKey);
@@ -1457,12 +1419,8 @@ function getSeasonalitySeries(meta) {
 
   return years
     .filter((year) => visibleYears.has(year))
-    .map((year, visibleIndex) => {
+    .map((year) => {
       const data = MONTH_NAMES_RU.map((_, monthIndex) => {
-        if (monthIndex < state.seasonalityMonthStart || monthIndex > state.seasonalityMonthEnd) {
-          return null;
-        }
-
         const key = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
         const index = months.indexOf(key);
 
@@ -1475,24 +1433,28 @@ function getSeasonalitySeries(meta) {
       });
 
       /*
-       * Для каждой отдельной годовой кривой интерполируем только
-       * пропуски между двумя фактическими наблюдениями этого года.
-       * Через границу года не интерполируем.
-       *
-       * Маркеры нужны только если исходные данные этого года
-       * выходили реже одного раза в месяц. Если показатель
-       * публиковался ежемесячно, линия остаётся без маркеров,
-       * даже если внутри года были отдельные пропуски.
+       * Все 12 месяцев отдаём в график целиком: видимое окно задаёт
+       * dataZoom-слайдер. Интерполируем только пропуски внутри года.
        */
       const showOriginalPoints = isSparseMonthlySeries(data);
       let seriesData = interpolateMonthlyValues(data);
 
       if (state.seasonalityMode === "percent") {
-        const referencePoint = seriesData.find(
-          (point) => point != null && Number.isFinite(Number(point.value))
-        );
+        const findReference = (from) => {
+          for (let i = from; i < seriesData.length; i++) {
+            const point = seriesData[i];
 
-        const reference = referencePoint ? Number(referencePoint.value) : null;
+            if (point != null && Number.isFinite(Number(point.value))) {
+              return Number(point.value);
+            }
+          }
+
+          return null;
+        };
+
+        /* 100% = первая точка внутри выбранного окна. */
+        const reference =
+          findReference(state.seasonalityMonthStart) ?? findReference(0);
 
         if (reference != null && reference !== 0) {
           seriesData = seriesData.map((point) => {
@@ -1506,19 +1468,15 @@ function getSeasonalitySeries(meta) {
         }
       }
 
-      const originalYearIndex = years.indexOf(year);
       const color = SERIES_PALETTE[
-        originalYearIndex % SERIES_PALETTE.length
+        years.indexOf(year) % SERIES_PALETTE.length
       ];
 
       return {
         id: `seasonality-${meta.key}-${year}`,
         name: String(year),
         type: "line",
-        data: seriesData.slice(
-          state.seasonalityMonthStart,
-          state.seasonalityMonthEnd + 1
-        ),
+        data: seriesData,
         connectNulls: true,
         showSymbol: showOriginalPoints,
         showAllSymbol: showOriginalPoints,
@@ -1636,10 +1594,7 @@ function buildSeasonalityTooltipFormatter(params) {
 function buildSeasonalityOption() {
   const meta = metaByKey(state.seasonalityKey);
   syncSeasonalityMonthState();
-  const months = getSeasonalityMonths().slice(
-    state.seasonalityMonthStart,
-    state.seasonalityMonthEnd + 1
-  );
+  const months = getSeasonalityMonths();
 
   return {
     backgroundColor: "transparent",
@@ -1653,7 +1608,7 @@ function buildSeasonalityOption() {
       left: state.seasonalityMode === "percent" ? 34 : 38,
       right: state.seasonalityMode === "percent" ? 34 : 38,
       top: meta ? 38 : 20,
-      bottom: 46,
+      bottom: 84,
       containLabel: false,
     },
 
@@ -1716,6 +1671,49 @@ function buildSeasonalityOption() {
       },
     },
 
+    dataZoom: [
+      {
+        type: "slider",
+
+        xAxisIndex: 0,
+
+        startValue: state.seasonalityMonthStart,
+        endValue: state.seasonalityMonthEnd,
+
+        minValueSpan: 1,
+
+        height: 24,
+
+        bottom: 30,
+
+        borderColor: "#232B36",
+
+        backgroundColor: "#0A0E13",
+
+        fillerColor: "rgba(61,220,132,0.10)",
+
+        handleStyle: {
+          color: "#1A222B",
+          borderColor: "#5B6673",
+        },
+
+        moveHandleStyle: {
+          color: "#2A3440",
+        },
+
+        textStyle: {
+          color: "#5B6673",
+
+          fontFamily: "var(--font-mono)",
+
+          fontSize: 11,
+        },
+
+        labelFormatter: (value, valueStr) =>
+          MONTH_NAMES_RU[Math.round(value)] || valueStr,
+      },
+    ],
+
     series: meta ? getSeasonalitySeries(meta) : [],
   };
 }
@@ -1742,36 +1740,52 @@ function renderSeasonality() {
 }
 
 
-function wireSeasonalityYearRange() {
-  const start = document.getElementById("seasonalityRangeStart");
-  const end = document.getElementById("seasonalityRangeEnd");
+function wireSeasonalityDataZoom() {
+  if (!seasonalityChart) return;
 
-  if (!start || !end) return;
+  seasonalityChart.on("dataZoom", () => {
+    const option = seasonalityChart.getOption();
+    const zoom = option && option.dataZoom && option.dataZoom[0];
 
-  const apply = (changed) => {
-    syncSeasonalityMonthState();
+    if (!zoom) return;
 
-    let startIndex = Number(start.value);
-    let endIndex = Number(end.value);
+    const max = MONTH_NAMES_RU.length - 1;
+    let start = Number(zoom.startValue);
+    let end = Number(zoom.endValue);
 
-    if (changed === "start") {
-      startIndex = Math.min(startIndex, endIndex);
-      start.value = String(startIndex);
-    } else {
-      endIndex = Math.max(endIndex, startIndex);
-      end.value = String(endIndex);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      start = (Number(zoom.start) / 100) * max;
+      end = (Number(zoom.end) / 100) * max;
     }
 
-    state.seasonalityMonthStart = startIndex;
-    state.seasonalityMonthEnd = endIndex;
+    start = Math.max(0, Math.min(max, Math.round(start)));
+    end = Math.max(0, Math.min(max, Math.round(end)));
+
+    if (end < start) [start, end] = [end, start];
+
+    if (
+      start === state.seasonalityMonthStart &&
+      end === state.seasonalityMonthEnd
+    ) {
+      return;
+    }
+
+    state.seasonalityMonthStart = start;
+    state.seasonalityMonthEnd = end;
     state.seasonalityMonthRangeInitialized = true;
 
-    updateSeasonalityMonthRange();
-    renderSeasonality();
-  };
+    /*
+     * В абсолютном режиме ECharts сам фильтрует данные по окну.
+     * В процентном нужно пересчитать базу 100% от нового левого края.
+     */
+    if (state.seasonalityMode === "percent") {
+      const meta = metaByKey(state.seasonalityKey);
 
-  start.addEventListener("input", () => apply("start"));
-  end.addEventListener("input", () => apply("end"));
+      if (meta) {
+        seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
+      }
+    }
+  });
 }
 
 
@@ -2343,6 +2357,15 @@ function buildYAxes() {
         },
       },
 
+      /* Подпись под курсором: целое число */
+      axisPointer: {
+        label: {
+          formatter: (params) => {
+            return String(Math.round(Number(params.value)));
+          },
+        },
+      },
+
       splitLine: {
         show: true,
 
@@ -2377,6 +2400,15 @@ function buildYAxes() {
               maximumFractionDigits: 2,
             }
           );
+        },
+      },
+
+      /* Подпись под курсором: два знака после запятой */
+      axisPointer: {
+        label: {
+          formatter: (params) => {
+            return Number(params.value).toFixed(2);
+          },
         },
       },
 
@@ -2588,6 +2620,9 @@ function buildOption() {
 
         start: state.zoomStart,
         end: state.zoomEnd,
+
+        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
+        brushSelect: false,
 
         height: 24,
 
@@ -3521,7 +3556,6 @@ async function init() {
      */
     buildCheckboxPanel();
     buildSeasonalityCheckboxPanel();
-    wireSeasonalityYearRange();
 
     /*
      * Первый рендер.
@@ -3655,6 +3689,7 @@ async function init() {
      * DataZoom.
      */
     wireDataZoom();
+    wireSeasonalityDataZoom();
 
     /*
      * Responsive.
