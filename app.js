@@ -50,6 +50,27 @@ const MONTH_NAMES_RU = [
   "Декабрь",
 ];
 
+/* Короткие названия месяцев для крайних подписей оси X: «мар 2021». */
+const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
+  name.slice(0, 3).toLowerCase()
+);
+
+/*
+ * Подписи оси X основного графика.
+ * Ширины — оценка в пикселях для шрифта 12px: нужны только для того,
+ * чтобы решить, какие годы между крайними подписями поместятся.
+ */
+const X_EDGE_LABEL_PX = 56;   /* «сен 2026» */
+const X_YEAR_LABEL_PX = 32;   /* «2021» */
+const X_LABEL_GAP_PX = 12;    /* минимальный зазор между подписями */
+const X_YEAR_STEPS = [1, 2, 5, 10];
+
+/* Пунктир «100%» — общий для основного графика и сезонности. */
+const BASELINE_COLOR = "#9EA0A5";
+
+/* Вертикальная сетка по годам. */
+const X_GRID_COLOR = "#232B36";
+
 const GROUP_ORDER = [
   "Зарплаты",
   "Курс",
@@ -1432,7 +1453,7 @@ function getSeasonalitySeries(meta) {
   const values = convertMonthlyValues(meta, state.seasonalityCurrency);
   const months = DATA.months;
 
-  return years
+  const result = years
     .filter((year) => visibleYears.has(year))
     .map((year) => {
       const data = MONTH_NAMES_RU.map((_, monthIndex) => {
@@ -1516,6 +1537,13 @@ function getSeasonalitySeries(meta) {
         itemStyle: { color },
       };
     });
+
+  /* В процентном режиме рисуем пунктир на уровне 100%. */
+  if (state.seasonalityMode === "percent" && result.length) {
+    result[0].markLine = buildBaselineMarkLine();
+  }
+
+  return result;
 }
 
 
@@ -1625,6 +1653,15 @@ function buildSeasonalityOption() {
       top: meta ? 38 : 20,
       bottom: 84,
       containLabel: false,
+    },
+
+    /*
+     * Отключаем автоматическую подсветку (emphasis) всех рядов,
+     * которую ECharts включает при tooltip.trigger = "axis".
+     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
+     */
+    axisPointer: {
+      triggerEmphasis: false,
     },
 
     tooltip: {
@@ -2152,7 +2189,7 @@ function buildSeries() {
     (meta) => state.visible[meta.key]
   );
 
-  return visibleMetas.map((meta) => {
+  const result = visibleMetas.map((meta) => {
     const rawValues = getSeriesValues(meta);
     const shouldInterpolate = !isAnnualSeries(meta);
 
@@ -2287,6 +2324,13 @@ function buildSeries() {
       symbolKeepAspect: true,
     };
   });
+
+  /* В процентном режиме рисуем пунктир на уровне 100%. */
+  if (state.mode === "percent" && result.length) {
+    result[0].markLine = buildBaselineMarkLine();
+  }
+
+  return result;
 }
 
 
@@ -2294,22 +2338,195 @@ function buildSeries() {
    Форматирование X-оси
    ============================================================ */
 
+let monthIndexMap = null;
+
+function getMonthIndex(month) {
+  if (!monthIndexMap) {
+    monthIndexMap = new Map(
+      DATA.months.map((value, index) => [value, index])
+    );
+  }
+
+  return monthIndexMap.get(month);
+}
+
+
+/* Отступ сетки слева/справа (одинаков для обеих сторон). */
+function getMainGridSide() {
+  return state.mode === "percent" ? 34 : 38;
+}
+
+
+/*
+ * Реальный видимый диапазон оси X (индексы месяцев).
+ *
+ * Читаем его прямо из dataZoom-модели ECharts, потому что подписи
+ * оси пересчитываются в момент отрисовки — раньше, чем наш state
+ * успевает обновиться. Если внутренний метод недоступен — берём
+ * диапазон из state.
+ */
+function getLiveXWindow() {
+  const last = DATA.months.length - 1;
+  let start = null;
+  let end = null;
+
+  try {
+    const model = chart && chart.getModel && chart.getModel();
+    const zoomModel = model && model.getComponent("dataZoom", 0);
+    const range =
+      zoomModel && zoomModel.getValueRange && zoomModel.getValueRange();
+
+    if (
+      Array.isArray(range) &&
+      Number.isFinite(range[0]) &&
+      Number.isFinite(range[1])
+    ) {
+      start = Math.round(range[0]);
+      end = Math.round(range[1]);
+    }
+  } catch (error) {
+    start = null;
+  }
+
+  if (start == null || end == null) {
+    start = Math.round((state.zoomStart / 100) * last);
+    end = Math.round((state.zoomEnd / 100) * last);
+  }
+
+  start = Math.max(0, Math.min(last, start));
+  end = Math.max(0, Math.min(last, end));
+
+  if (end < start) {
+    [start, end] = [end, start];
+  }
+
+  return [start, end];
+}
+
+
+let xTickLayoutCache = null;
+
+/*
+ * Раскладка подписей и вертикальной сетки для текущего диапазона.
+ *
+ *   start / end — первый и последний месяц диапазона: подписаны всегда;
+ *   labels      — индексы месяцев с подписью (крайние + подходящие годы);
+ *   januaries   — индексы январей внутри диапазона: на них линии сетки
+ *                 (шаг сетки — 1 год).
+ *
+ * Между крайними подписями остаются только те годы, которые не
+ * налезают друг на друга: при тесной шкале подписи через один,
+ * через пять лет и т. д. (кратные годы: 2020, 2022, ...).
+ */
+function getXTickLayout() {
+  const [start, end] = getLiveXWindow();
+  const width = chart ? chart.getWidth() : 0;
+  const key = `${start}|${end}|${width}|${getMainGridSide()}`;
+
+  if (xTickLayoutCache && xTickLayoutCache.key === key) {
+    return xTickLayoutCache;
+  }
+
+  const months = DATA.months;
+  const gridWidth = Math.max(
+    120,
+    (width || 800) - 2 * getMainGridSide()
+  );
+  const pxPerMonth = gridWidth / Math.max(1, end - start);
+
+  const januaries = new Set();
+
+  for (let i = start + 1; i < end; i++) {
+    if (months[i].slice(5, 7) === "01") {
+      januaries.add(i);
+    }
+  }
+
+  /* Наименьший шаг по годам, при котором подписи не слипаются. */
+  const minSpacing = X_YEAR_LABEL_PX + X_LABEL_GAP_PX;
+  let step = X_YEAR_STEPS[X_YEAR_STEPS.length - 1];
+
+  for (const candidate of X_YEAR_STEPS) {
+    if (candidate * 12 * pxPerMonth >= minSpacing) {
+      step = candidate;
+      break;
+    }
+  }
+
+  /*
+   * Крайние подписи прижаты к краям сетки (слева — по левому краю,
+   * справа — по правому), поэтому год не должен подходить к краю
+   * ближе, чем ширина крайней подписи + зазор + половина года.
+   */
+  const safeEdge =
+    X_EDGE_LABEL_PX + X_LABEL_GAP_PX + X_YEAR_LABEL_PX / 2;
+
+  const labels = new Set([start, end]);
+
+  januaries.forEach((index) => {
+    const year = Number(months[index].slice(0, 4));
+
+    if (year % step !== 0) {
+      return;
+    }
+
+    const x = (index - start) * pxPerMonth;
+
+    if (x < safeEdge || gridWidth - x < safeEdge) {
+      return;
+    }
+
+    labels.add(index);
+  });
+
+  xTickLayoutCache = { key, start, end, labels, januaries };
+
+  return xTickLayoutCache;
+}
+
+
 function formatXAxisLabel(value) {
   if (!isYearMonth(value)) {
     return value;
   }
 
-  const year = value.slice(0, 4);
-  const month = value.slice(5, 7);
+  const index = getMonthIndex(value);
+  const layout = getXTickLayout();
 
-  /*
-   * На широкой шкале показываем только годы.
-   */
-  if (month === "01") {
-    return year;
+  /* Первый и последний месяц диапазона: «мар 2021». */
+  if (index === layout.start || index === layout.end) {
+    return `${MONTH_SHORT_RU[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}`;
+  }
+
+  /* Промежуточные подписи — только год. */
+  if (layout.labels.has(index)) {
+    return value.slice(0, 4);
   }
 
   return "";
+}
+
+
+/* ============================================================
+   Пунктирная линия 100% (для процентных графиков)
+   ============================================================ */
+
+function buildBaselineMarkLine() {
+  return {
+    silent: true,
+    animation: false,
+    symbol: ["none", "none"],
+    label: { show: false },
+    lineStyle: {
+      color: BASELINE_COLOR,
+      width: 1,
+      type: "dashed",
+    },
+    emphasis: { lineStyle: { width: 1 } },
+    /* Не тускнеет, когда наведение подсвечивает другую линию. */
+    blur: { lineStyle: { opacity: 1 } },
+    data: [{ yAxis: 100 }],
+  };
 }
 
 
@@ -2561,12 +2778,21 @@ function buildOption() {
     },
 
     grid: {
-      left: state.mode === "percent" ? 34 : 38,
-      right: state.mode === "percent" ? 34 : 38,
+      left: getMainGridSide(),
+      right: getMainGridSide(),
       top: 42,
       bottom: 84,
 
       containLabel: false,
+    },
+
+    /*
+     * Отключаем автоматическую подсветку (emphasis) всех рядов,
+     * которую ECharts включает при tooltip.trigger = "axis".
+     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
+     */
+    axisPointer: {
+      triggerEmphasis: false,
     },
 
     tooltip: {
@@ -2616,6 +2842,18 @@ function buildOption() {
 
         hideOverlap: true,
 
+        /*
+         * Подписи задаём явно: первый и последний месяц диапазона
+         * всегда видны, между ними — годы, которые помещаются.
+         * (Автоматический шаг ECharts мог целиком пропускать январи,
+         * и оставалась одна подпись.)
+         */
+        interval: (index) => getXTickLayout().labels.has(index),
+        showMinLabel: true,
+        showMaxLabel: true,
+        alignMinLabel: "left",
+        alignMaxLabel: "right",
+
         formatter: formatXAxisLabel,
       },
 
@@ -2629,8 +2867,16 @@ function buildOption() {
         show: false,
       },
 
+      /* Вертикальная сетка: одна линия на каждый январь (шаг — 1 год). */
       splitLine: {
-        show: false,
+        show: true,
+        showMinLine: false,
+        showMaxLine: false,
+        interval: (index) => getXTickLayout().januaries.has(index),
+        lineStyle: {
+          color: X_GRID_COLOR,
+          width: 1,
+        },
       },
     },
 
