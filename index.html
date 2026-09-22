@@ -97,6 +97,16 @@
 
       <div id="seasonalityChart" class="seasonality-chart" role="img" aria-label="График сезонности выбранного показателя по месяцам разных лет"></div>
 
+      <div class="seasonality-year-range" id="seasonalityYearRange" aria-label="Диапазон годов сезонности">
+        <div class="seasonality-range-track">
+          <input type="range" id="seasonalityRangeStart" min="0" max="11" value="0" step="1" aria-label="Начальный месяц">
+          <input type="range" id="seasonalityRangeEnd" min="0" max="11" value="11" step="1" aria-label="Конечный месяц">
+        </div>
+        <div class="seasonality-range-labels">
+          <span id="seasonalityRangeStartLabel">—</span>
+          <span id="seasonalityRangeEndLabel">—</span>
+        </div>
+      </div>
     </section>
 
     <details class="controls seasonality-years-controls" id="seasonalityYearsPanel" open>
