@@ -17,21 +17,6 @@
 
 
 /* ============================================================
-   Сенсорные устройства (телефон / планшет)
-   ============================================================
-   На тач-экранах зум и перемещение графика возможны ТОЛЬКО через
-   нижний ползунок (slider). Касание графика лишь показывает
-   всплывающее окно. На компьютере (мышь) поведение не меняется.
-   ============================================================ */
-
-const IS_TOUCH = !!(
-  window.matchMedia &&
-  window.matchMedia("(pointer: coarse)").matches
-);
-
-
-
-/* ============================================================
    Константы
    ============================================================ */
 
@@ -1627,15 +1612,6 @@ function buildSeasonalityOption() {
       containLabel: false,
     },
 
-    /*
-     * Отключаем автоматическую подсветку (emphasis) всех рядов,
-     * которую ECharts включает при tooltip.trigger = "axis".
-     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
-     */
-    axisPointer: {
-      triggerEmphasis: false,
-    },
-
     tooltip: {
       trigger: "axis",
       confine: true,
@@ -1705,9 +1681,6 @@ function buildSeasonalityOption() {
         endValue: state.seasonalityMonthEnd,
 
         minValueSpan: 1,
-
-        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
-        brushSelect: false,
 
         height: 24,
 
@@ -1938,12 +1911,6 @@ function updateTooltipHighlight(chartContainer, activeSeriesId) {
 
 function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   if (!chartInstance || !chartElement) return;
-
-  /*
-   * На тач-экране касание графика только показывает тултип:
-   * подсветку отдельных линий не включаем.
-   */
-  if (IS_TOUCH) return;
 
   let rafId = null;
   let lastHoveredId = null;
@@ -2390,15 +2357,6 @@ function buildYAxes() {
         },
       },
 
-      /* Подпись под курсором: целое число */
-      axisPointer: {
-        label: {
-          formatter: (params) => {
-            return String(Math.round(Number(params.value)));
-          },
-        },
-      },
-
       splitLine: {
         show: true,
 
@@ -2433,15 +2391,6 @@ function buildYAxes() {
               maximumFractionDigits: 2,
             }
           );
-        },
-      },
-
-      /* Подпись под курсором: два знака после запятой */
-      axisPointer: {
-        label: {
-          formatter: (params) => {
-            return Number(params.value).toFixed(2);
-          },
         },
       },
 
@@ -2578,15 +2527,6 @@ function buildOption() {
       containLabel: false,
     },
 
-    /*
-     * Отключаем автоматическую подсветку (emphasis) всех рядов,
-     * которую ECharts включает при tooltip.trigger = "axis".
-     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
-     */
-    axisPointer: {
-      triggerEmphasis: false,
-    },
-
     tooltip: {
       trigger: "axis",
 
@@ -2663,9 +2603,6 @@ function buildOption() {
         start: state.zoomStart,
         end: state.zoomEnd,
 
-        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
-        brushSelect: false,
-
         height: 24,
 
         bottom: 30,
@@ -2702,29 +2639,20 @@ function buildOption() {
         },
       },
 
-      /*
-       * "inside" (колесо / перетаскивание / pinch по самому графику)
-       * подключаем только на устройствах с мышью. На тач-экране
-       * управление диапазоном — только нижним ползунком.
-       */
-      ...(IS_TOUCH
-        ? []
-        : [
-            {
-              type: "inside",
+      {
+        type: "inside",
 
-              xAxisIndex: 0,
+        xAxisIndex: 0,
 
-              start: state.zoomStart,
-              end: state.zoomEnd,
+        start: state.zoomStart,
+        end: state.zoomEnd,
 
-              zoomOnMouseWheel: true,
+        zoomOnMouseWheel: true,
 
-              moveOnMouseMove: true,
+        moveOnMouseMove: true,
 
-              moveOnMouseWheel: true,
-            },
-          ]),
+        moveOnMouseWheel: true,
+      },
     ],
 
     series: buildSeries(),
@@ -3347,19 +3275,6 @@ function wireDataZoom() {
     updateZoomPresetButtons();
 
     /*
-     * На тач-экране диапазон меняется только нижним ползунком
-     * (ручки или перетаскивание всего окна) — принимаем как есть.
-     */
-    if (IS_TOUCH) {
-      state.zoomStart = start;
-      state.zoomEnd = end;
-      state.lastZoomStart = start;
-      state.lastZoomEnd = end;
-      state.zoomAnchorEnd = end;
-      return;
-    }
-
-    /*
      * Если это НЕ колесо, значит пользователь физически двигает
      * ручку slider или весь выделенный диапазон. Такие изменения
      * принимаем без коррекции.
@@ -3456,7 +3371,7 @@ function wireDataZoom() {
 
       chart.dispatchAction({
         type: "dataZoom",
-        dataZoomIndex: IS_TOUCH ? [0] : [0, 1],
+        dataZoomIndex: [0, 1],
         start: correctedStart,
         end: correctedEnd,
       });
