@@ -1743,10 +1743,8 @@ function buildSeasonalityOption() {
 
         xAxisIndex: 0,
 
-        startValue: state.seasonalityMonthStart,
-        endValue: state.seasonalityMonthEnd,
-
-        minValueSpan: 1,
+        start: (state.seasonalityMonthStart / 11) * 100,
+        end: (state.seasonalityMonthEnd / 11) * 100,
 
         /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
         brushSelect: false,
@@ -1781,6 +1779,29 @@ function buildSeasonalityOption() {
         labelFormatter: (value, valueStr) =>
           MONTH_NAMES_RU[Math.round(value)] || valueStr,
       },
+
+      /*
+       * Полностью повторяем принцип основного графика:
+       * на компьютере диапазон можно менять колесом/перетаскиванием
+       * прямо по графику, а на тач-экране — только нижним ползунком.
+       */
+      ...(IS_TOUCH
+        ? []
+        : [
+            {
+              type: "inside",
+
+              xAxisIndex: 0,
+
+              start: (state.seasonalityMonthStart / 11) * 100,
+              end: (state.seasonalityMonthEnd / 11) * 100,
+
+              zoomOnMouseWheel: true,
+
+              moveOnMouseMove: true,
+              moveOnMouseWheel: true,
+            },
+          ]),
     ],
 
     series: meta ? getSeasonalitySeries(meta) : [],
@@ -1819,33 +1840,36 @@ function wireSeasonalityDataZoom() {
     if (!zoom) return;
 
     const max = MONTH_NAMES_RU.length - 1;
-    let start = Number(zoom.startValue);
-    let end = Number(zoom.endValue);
+    let start = Number(zoom.start);
+    let end = Number(zoom.end);
 
     if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      start = (Number(zoom.start) / 100) * max;
-      end = (Number(zoom.end) / 100) * max;
+      return;
     }
 
-    start = Math.max(0, Math.min(max, Math.round(start)));
-    end = Math.max(0, Math.min(max, Math.round(end)));
+    start = Math.max(0, Math.min(100, start));
+    end = Math.max(0, Math.min(100, end));
 
     if (end < start) [start, end] = [end, start];
 
+    /* Процентный диапазон ECharts -> индексы месяцев 0..11. */
+    const monthStart = Math.round((start / 100) * max);
+    const monthEnd = Math.round((end / 100) * max);
+
     if (
-      start === state.seasonalityMonthStart &&
-      end === state.seasonalityMonthEnd
+      monthStart === state.seasonalityMonthStart &&
+      monthEnd === state.seasonalityMonthEnd
     ) {
       return;
     }
 
-    state.seasonalityMonthStart = start;
-    state.seasonalityMonthEnd = end;
+    state.seasonalityMonthStart = monthStart;
+    state.seasonalityMonthEnd = Math.max(monthStart, monthEnd);
     state.seasonalityMonthRangeInitialized = true;
 
     /*
-     * В абсолютном режиме ECharts сам фильтрует данные по окну.
-     * В процентном нужно пересчитать базу 100% от нового левого края.
+     * В процентном режиме после изменения левого края нужно
+     * пересчитать базу 100%, как и раньше.
      */
     if (state.seasonalityMode === "percent") {
       const meta = metaByKey(state.seasonalityKey);
@@ -1856,6 +1880,7 @@ function wireSeasonalityDataZoom() {
     }
   });
 }
+
 
 
 /* ============================================================
