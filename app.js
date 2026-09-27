@@ -266,6 +266,20 @@ function metaByKey(key) {
 
 
 /*
+ * Индекс ряда в ИСХОДНОМ (несортированном) списке series_meta.
+ *
+ * Это единственный источник индекса для назначения цвета.
+ * Панель чекбоксов показывает показатели в отсортированном порядке
+ * (по группам), а график и тултип используют исходный порядок —
+ * если брать индекс из отсортированного списка, цвет в чекбоксе и
+ * цвет линии на графике для одного и того же показателя расходятся.
+ */
+function getStableSeriesIndex(meta) {
+  return getSeriesMeta().indexOf(meta);
+}
+
+
+/*
  * Получить цвет ряда.
  *
  * Для первых старых рядов пытаемся использовать существующие
@@ -1195,7 +1209,7 @@ function buildCheckboxPanel() {
     checkbox.type = "checkbox";
     checkbox.checked = !!state.visible[meta.key];
 
-    const color = getSeriesColor(meta, index);
+    const color = getSeriesColor(meta, getStableSeriesIndex(meta));
 
     checkbox.style.accentColor = color;
 
@@ -1391,7 +1405,7 @@ function buildSeasonalityCheckboxPanel() {
     checkbox.type = "checkbox";
     checkbox.checked = state.seasonalityKey === meta.key;
 
-    const color = getSeriesColor(meta, index);
+    const color = getSeriesColor(meta, getStableSeriesIndex(meta));
     checkbox.style.accentColor = color;
 
     checkbox.addEventListener("change", () => {
@@ -2724,10 +2738,7 @@ function buildTooltipFormatter(params) {
 
     const color =
       param.color ||
-      getSeriesColor(
-        meta,
-        getSeriesMeta().indexOf(meta)
-      );
+      getSeriesColor(meta, getStableSeriesIndex(meta));
 
     const valueText = formatValue(
       rawValue,
