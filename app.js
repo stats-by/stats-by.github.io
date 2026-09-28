@@ -1737,51 +1737,7 @@ function buildSeasonalityOption() {
       },
     },
 
-    dataZoom: [
-      {
-        type: "slider",
-
-        xAxisIndex: 0,
-
-        startValue: state.seasonalityMonthStart,
-        endValue: state.seasonalityMonthEnd,
-
-        minValueSpan: 1,
-
-        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
-        brushSelect: false,
-
-        height: 24,
-
-        bottom: 30,
-
-        borderColor: "#232B36",
-
-        backgroundColor: "#0A0E13",
-
-        fillerColor: "rgba(61,220,132,0.10)",
-
-        handleStyle: {
-          color: "#1A222B",
-          borderColor: "#5B6673",
-        },
-
-        moveHandleStyle: {
-          color: "#2A3440",
-        },
-
-        textStyle: {
-          color: "#5B6673",
-
-          fontFamily: "var(--font-mono)",
-
-          fontSize: 11,
-        },
-
-        labelFormatter: (value, valueStr) =>
-          MONTH_NAMES_RU[Math.round(value)] || valueStr,
-      },
-    ],
+    dataZoom: buildSeasonalityDataZoom(),
 
     series: meta ? getSeasonalitySeries(meta) : [],
   };
@@ -1809,6 +1765,111 @@ function renderSeasonality() {
 }
 
 
+/* ============================================================
+   Таймлайн (dataZoom) графика сезонности
+   ============================================================
+   Собран по тому же принципу, что и под первым графиком:
+   нижний slider (те же размеры и цвета) + на компьютере
+   inside-зум мышью. Границы окна хранятся как индексы месяцев
+   0..11 (для Deep Link), а в ECharts передаются в процентах.
+   ============================================================ */
+
+const SEASONALITY_MAX_INDEX = 11;
+
+
+function seasonalityIndexToPercent(index) {
+  return (index / SEASONALITY_MAX_INDEX) * 100;
+}
+
+
+function seasonalityPercentToIndex(percent) {
+  return Math.max(
+    0,
+    Math.min(
+      SEASONALITY_MAX_INDEX,
+      Math.round((Number(percent) / 100) * SEASONALITY_MAX_INDEX)
+    )
+  );
+}
+
+
+function buildSeasonalityDataZoom() {
+  syncSeasonalityMonthState();
+
+  const start = seasonalityIndexToPercent(state.seasonalityMonthStart);
+  const end = seasonalityIndexToPercent(state.seasonalityMonthEnd);
+
+  return [
+    {
+      type: "slider",
+
+      xAxisIndex: 0,
+
+      start,
+      end,
+
+      /* Минимум — два соседних месяца. */
+      minValueSpan: 1,
+
+      /* Отключаем выделение нового диапазона протяжкой ЛКМ. */
+      brushSelect: false,
+
+      height: 24,
+
+      bottom: 30,
+
+      borderColor: "#232B36",
+
+      backgroundColor: "#0A0E13",
+
+      fillerColor: "rgba(61,220,132,0.10)",
+
+      handleStyle: {
+        color: "#1A222B",
+        borderColor: "#5B6673",
+      },
+
+      moveHandleStyle: {
+        color: "#2A3440",
+      },
+
+      textStyle: {
+        color: "#5B6673",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+      },
+
+      labelFormatter: (value, valueStr) => {
+        const name = MONTH_NAMES_RU[Math.round(value)];
+        return name || valueStr;
+      },
+    },
+
+    /* На тач-экране диапазон меняется только нижним ползунком. */
+    ...(IS_TOUCH
+      ? []
+      : [
+          {
+            type: "inside",
+
+            xAxisIndex: 0,
+
+            start,
+            end,
+
+            minValueSpan: 1,
+
+            zoomOnMouseWheel: true,
+
+            moveOnMouseMove: true,
+
+            moveOnMouseWheel: true,
+          },
+        ]),
+  ];
+}
+
+
 function wireSeasonalityDataZoom() {
   if (!seasonalityChart) return;
 
@@ -1818,19 +1879,23 @@ function wireSeasonalityDataZoom() {
 
     if (!zoom) return;
 
-    const max = MONTH_NAMES_RU.length - 1;
-    let start = Number(zoom.startValue);
-    let end = Number(zoom.endValue);
+    let startPercent = Number(zoom.start);
+    let endPercent = Number(zoom.end);
 
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      start = (Number(zoom.start) / 100) * max;
-      end = (Number(zoom.end) / 100) * max;
+    if (!Number.isFinite(startPercent) || !Number.isFinite(endPercent)) {
+      return;
     }
 
-    start = Math.max(0, Math.min(max, Math.round(start)));
-    end = Math.max(0, Math.min(max, Math.round(end)));
+    if (endPercent < startPercent) {
+      [startPercent, endPercent] = [endPercent, startPercent];
+    }
 
-    if (end < start) [start, end] = [end, start];
+    let start = seasonalityPercentToIndex(startPercent);
+    let end = seasonalityPercentToIndex(endPercent);
+
+    if (end < start) {
+      [start, end] = [end, start];
+    }
 
     if (
       start === state.seasonalityMonthStart &&
