@@ -1796,76 +1796,14 @@ function seasonalityPercentToIndex(percent) {
 function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
-  const start = seasonalityIndexToPercent(state.seasonalityMonthStart);
-  const end = seasonalityIndexToPercent(state.seasonalityMonthEnd);
-
+  /* Базовый slider ECharts — без кастомных настроек. */
   return [
     {
       type: "slider",
-
       xAxisIndex: 0,
-
-      start,
-      end,
-
-      /* Минимум — два соседних месяца. */
-      minValueSpan: 1,
-
-      /* Отключаем выделение нового диапазона протяжкой ЛКМ. */
-      brushSelect: false,
-
-      height: 24,
-
-      bottom: 30,
-
-      borderColor: "#232B36",
-
-      backgroundColor: "#0A0E13",
-
-      fillerColor: "rgba(61,220,132,0.10)",
-
-      handleStyle: {
-        color: "#1A222B",
-        borderColor: "#5B6673",
-      },
-
-      moveHandleStyle: {
-        color: "#2A3440",
-      },
-
-      textStyle: {
-        color: "#5B6673",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-      },
-
-      labelFormatter: (value, valueStr) => {
-        const name = MONTH_NAMES_RU[Math.round(value)];
-        return name || valueStr;
-      },
+      start: seasonalityIndexToPercent(state.seasonalityMonthStart),
+      end: seasonalityIndexToPercent(state.seasonalityMonthEnd),
     },
-
-    /* На тач-экране диапазон меняется только нижним ползунком. */
-    ...(IS_TOUCH
-      ? []
-      : [
-          {
-            type: "inside",
-
-            xAxisIndex: 0,
-
-            start,
-            end,
-
-            minValueSpan: 1,
-
-            zoomOnMouseWheel: true,
-
-            moveOnMouseMove: true,
-
-            moveOnMouseWheel: true,
-          },
-        ]),
   ];
 }
 
@@ -1879,15 +1817,11 @@ function wireSeasonalityDataZoom() {
 
     if (!zoom) return;
 
-    let startPercent = Number(zoom.start);
-    let endPercent = Number(zoom.end);
+    const startPercent = Number(zoom.start);
+    const endPercent = Number(zoom.end);
 
     if (!Number.isFinite(startPercent) || !Number.isFinite(endPercent)) {
       return;
-    }
-
-    if (endPercent < startPercent) {
-      [startPercent, endPercent] = [endPercent, startPercent];
     }
 
     let start = seasonalityPercentToIndex(startPercent);
@@ -1908,10 +1842,7 @@ function wireSeasonalityDataZoom() {
     state.seasonalityMonthEnd = end;
     state.seasonalityMonthRangeInitialized = true;
 
-    /*
-     * В абсолютном режиме ECharts сам фильтрует данные по окну.
-     * В процентном нужно пересчитать базу 100% от нового левого края.
-     */
+    /* В процентном режиме пересчитываем базу 100% от левого края. */
     if (state.seasonalityMode === "percent") {
       const meta = metaByKey(state.seasonalityKey);
 
