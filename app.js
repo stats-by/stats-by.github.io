@@ -1,16 +1,6 @@
 /* ============================================================
    stats.by — V1
    Frontend для data.json v3
-
-   Источник данных:
-     data.json
-       - months
-       - series
-       - annual_series
-       - series_meta
-
-   В V1 список показателей НЕ прописан вручную.
-   Он строится из series_meta, который формирует build_data.py.
    ============================================================ */
 
 "use strict";
@@ -18,10 +8,6 @@
 
 /* ============================================================
    Сенсорные устройства (телефон / планшет)
-   ============================================================
-   На тач-экранах зум и перемещение графика возможны ТОЛЬКО через
-   нижний ползунок (slider). Касание графика лишь показывает
-   всплывающее окно. На компьютере (мышь) поведение не меняется.
    ============================================================ */
 
 const IS_TOUCH = !!(
@@ -50,25 +36,17 @@ const MONTH_NAMES_RU = [
   "Декабрь",
 ];
 
-/* Короткие названия месяцев для крайних подписей оси X: «мар 2021». */
 const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
   name.slice(0, 3).toLowerCase()
 );
 
-/*
- * Подписи оси X основного графика.
- * Ширины — оценка в пикселях для шрифта 12px: нужны только для того,
- * чтобы решить, какие годы между крайними подписями поместятся.
- */
-const X_EDGE_LABEL_PX = 56;   /* «сен 2026» */
-const X_YEAR_LABEL_PX = 32;   /* «2021» */
-const X_LABEL_GAP_PX = 12;    /* минимальный зазор между подписями */
+const X_EDGE_LABEL_PX = 56;
+const X_YEAR_LABEL_PX = 32;
+const X_LABEL_GAP_PX = 12;
 const X_YEAR_STEPS = [1, 2, 5, 10];
 
-/* Пунктир «100%» — общий для основного графика и сезонности. */
 const BASELINE_COLOR = "#9EA0A5";
 
-/* Вертикальная сетка по годам. */
 const X_GRID_COLOR = "#232B36";
 
 const GROUP_ORDER = [
@@ -81,32 +59,17 @@ const GROUP_ORDER = [
   "Ставка",
 ];
 
-/*
- * Фиксированный порядок показателей внутри групп.
- * Для зарплат он соответствует порядку в интерфейсе:
- * медианная страна -> средняя страна -> медианная Минск ->
- * средняя Минск -> минимальная.
- */
 const CHECKBOX_ORDER = [
-  // Зарплаты
   "медианная_беларусь",
   "средняя_средняя_по_стране",
   "медианная_минск",
   "средняя_средняя_минск",
   "мин_зп_минимальная_по_стране",
-
-  // Курс
   "курс_usd_курс_usd_byn",
-
-  // Строительство
   "строительство_год_тыс",
   "строительство_год",
-
-  // Аренда
   "аренда_стоимость_аренды_realt",
   "аренда_стоимость_аренды_t_s_by",
-
-  // стоимость квартир Realt
   "realt_м2_стоимость_м2_однушек",
   "realt_м2_стоимость_м2_двушек",
   "realt_м2_стоимость_м2_трешек",
@@ -115,8 +78,6 @@ const CHECKBOX_ORDER = [
   "realt_м2_объявления_вторичка",
   "realt_м2_объявления_новостройки_вторичка",
   "realt_сделки_количество_сделок_новостройки_вторичка",
-
-  // стоимость квартир Wikidom
   "wikidom_м2_стоимость_м2_однушек",
   "wikidom_м2_стоимость_м2_двушек",
   "wikidom_м2_стоимость_м2_трешек",
@@ -136,16 +97,13 @@ const state = {
   currency: "BYN",
   mode: "absolute",
 
-  /* Независимые настройки графика сезонности. */
   seasonalityCurrency: "USD",
   seasonalityMode: "percent",
 
   visible: {},
 
-  /* Показатель, выбранный для графика сезонности. */
   seasonalityKey: "курс_usd_курс_usd_byn",
 
-  /* Годы, отображаемые на графике сезонности. */
   seasonalityYears: new Set(),
   seasonalityYearsInitialized: false,
   seasonalityMonthStart: 0,
@@ -155,24 +113,15 @@ const state = {
   zoomStart: 0,
   zoomEnd: 100,
 
-  /* Последний подтверждённый диапазон dataZoom. */
   lastZoomStart: 0,
   lastZoomEnd: 100,
 
-  /* Правая граница, от которой начинается ручной зум. */
   zoomAnchorEnd: 100,
 
-  /*
-   * Признак именно zoom колесом/gesture.
-   * Нужен для того, чтобы не путать его с физическим
-   * перетаскиванием ручек slider.
-   */
   wheelZoomAt: 0,
 
-  /* Не даём служебной коррекции dataZoom повторно обработать себя. */
   correctingZoom: false,
 
-  /* Активные (подсвеченные) ряды при наведении на линии графиков */
   hoveredMainSeriesId: null,
   hoveredSeasonalitySeriesId: null,
 };
@@ -196,10 +145,6 @@ const resolvedColors = {};
 function resolveCssColors() {
   const styles = getComputedStyle(document.documentElement);
 
-  /*
-   * Сохраняем существующие цвета V0 для первых основных рядов.
-   * Для новых рядов используем палитру ниже.
-   */
   const cssVariables = [
     "--c-median-country",
     "--c-avg-country",
@@ -221,12 +166,6 @@ function resolveCssColors() {
 }
 
 
-/*
- * Цвета для новых рядов.
- *
- * Это не влияет на данные.
- * Только распределяет визуальные цвета между линиями.
- */
 const SERIES_PALETTE = [
   "#F2B84B",
   "#F0793C",
@@ -265,27 +204,11 @@ function metaByKey(key) {
 }
 
 
-/*
- * Индекс ряда в ИСХОДНОМ (несортированном) списке series_meta.
- *
- * Это единственный источник индекса для назначения цвета.
- * Панель чекбоксов показывает показатели в отсортированном порядке
- * (по группам), а график и тултип используют исходный порядок —
- * если брать индекс из отсортированного списка, цвет в чекбоксе и
- * цвет линии на графике для одного и того же показателя расходятся.
- */
 function getStableSeriesIndex(meta) {
   return getSeriesMeta().indexOf(meta);
 }
 
 
-/*
- * Получить цвет ряда.
- *
- * Для первых старых рядов пытаемся использовать существующие
- * CSS-переменные style.css.
- * Для всех остальных назначаем цвет из общей палитры.
- */
 function getSeriesColor(meta, index) {
   const cssColorMap = {
     "медианная_беларусь": "--c-median-country",
@@ -318,10 +241,6 @@ function getGroupLabel(meta) {
     return "Прочее";
   }
 
-  /*
-   * В build_data.py группа уже может быть указана.
-   * Если её нет — определяем по названию листа.
-   */
   if (meta.group) {
     const groupMap = {
       salary: "Зарплаты",
@@ -372,9 +291,6 @@ function getGroupLabel(meta) {
 }
 
 
-/*
- * Группа определяет поведение ряда при переключении валюты.
- */
 function getInternalGroup(meta) {
   const label = getGroupLabel(meta);
 
@@ -419,10 +335,6 @@ async function loadData() {
 }
 
 
-/* ============================================================
-   Проверка структуры data.json
-   ============================================================ */
-
 function validateData(data) {
   if (!data || typeof data !== "object") {
     throw new Error("data.json содержит некорректный JSON.");
@@ -440,17 +352,10 @@ function validateData(data) {
     throw new Error("В data.json отсутствует массив series_meta.");
   }
 
-  /*
-   * annual_series в V1 может быть пустым.
-   */
   if (!data.annual_series || typeof data.annual_series !== "object") {
     data.annual_series = {};
   }
 
-  /*
-   * Проверяем наличие всех рядов из metadata.
-   * Если какого-то ряда нет — просто предупреждаем.
-   */
   data.series_meta.forEach((meta) => {
     if (!data.series.hasOwnProperty(meta.key)) {
       console.warn(
@@ -519,25 +424,14 @@ function getDisplayUnit(meta) {
 
   const group = getInternalGroup(meta);
 
-  /*
-   * Зарплаты:
-   * исходные данные в BYN.
-   */
   if (group === "salary") {
     return state.currency;
   }
 
-  /*
-   * Жильё:
-   * исходные данные в USD.
-   */
   if (group === "housing") {
     return state.currency;
   }
 
-  /*
-   * Остальные показатели валютный переключатель не меняет.
-   */
   return getMetaUnit(meta);
 }
 
@@ -601,13 +495,6 @@ function getRawMonthlyValues(meta) {
    ============================================================ */
 
 function getUsdRateSeries() {
-  /*
-   * build_data.py создаёт этот ряд динамически.
-   *
-   * Если ключ известен напрямую — используем его.
-   * Иначе ищем по metadata.
-   */
-
   if (DATA.series["курс_usd_курс_usd_byn"]) {
     return DATA.series["курс_usd_курс_usd_byn"];
   }
@@ -640,26 +527,14 @@ function convertMonthlyValues(meta, currency) {
 
   const group = getInternalGroup(meta);
 
-  /*
-   * Курс USD/BYN не конвертируется.
-   */
   if (group === "rate") {
     return raw.slice();
   }
 
-  /*
-   * Прочие нефинансовые показатели также не меняются.
-   */
   if (group !== "salary" && group !== "housing") {
     return raw.slice();
   }
 
-  /*
-   * Если выбрана исходная валюта ряда:
-   *
-   * salary -> BYN
-   * housing -> USD
-   */
   if (
     (group === "salary" && currency === "BYN") ||
     (group === "housing" && currency === "USD")
@@ -677,9 +552,6 @@ function convertMonthlyValues(meta, currency) {
     return raw.slice();
   }
 
-  /*
-   * BYN -> USD
-   */
   if (group === "salary" && currency === "USD") {
     return raw.map((value, index) => {
       const rate = usdRate[index];
@@ -698,9 +570,6 @@ function convertMonthlyValues(meta, currency) {
     });
   }
 
-  /*
-   * USD -> BYN
-   */
   if (group === "housing" && currency === "BYN") {
     return raw.map((value, index) => {
       const rate = usdRate[index];
@@ -741,13 +610,6 @@ function getRawAnnualValues(meta) {
 }
 
 
-/*
- * Преобразуем годовые данные в массив по общей месячной шкале.
- *
- * Годовое значение ставим в декабрь соответствующего года.
- *
- * Это позволяет совместить monthly и yearly ряды в одном ECharts.
- */
 function getAnnualAsMonthly(meta) {
   const raw = getRawAnnualValues(meta);
 
@@ -793,16 +655,6 @@ function getSeriesValues(meta) {
    Линейная интерполяция разреженных месячных рядов
    ============================================================ */
 
-/*
- * Заполняем только пропуски МЕЖДУ двумя реальными значениями.
- *
- * Возвращаем объекты, чтобы ECharts мог отличать:
- *   isOriginal: true  — исходная точка, на ней показываем маркер;
- *   isOriginal: false — интерполированное значение, маркера нет.
- *
- * Значения до первой и после последней исходной точки не
- * экстраполируются и остаются null.
- */
 function interpolateMonthlyValues(values) {
   if (!Array.isArray(values)) {
     return [];
@@ -851,11 +703,6 @@ function interpolateMonthlyValues(values) {
 }
 
 
-/*
- * Нормализация в проценты с сохранением признака исходной
- * точки. Это важно: после интерполяции маркеры должны
- * оставаться только на фактических наблюдениях.
- */
 function normalizeSeriesPointsToPercent(points, baseIndex) {
   if (!Array.isArray(points)) {
     return [];
@@ -916,15 +763,6 @@ function normalizeSeriesPointsToPercent(points, baseIndex) {
 }
 
 
-
-/*
- * Определяем, действительно ли ряд выходит реже одного раза в месяц.
- *
- * В metadata многие ряды имеют frequency:"monthly", даже если
- * фактические наблюдения публикуются, например, раз в полгода.
- * Поэтому для отображения маркеров смотрим на реальные даты:
- * пропуски отдельных месяцев НЕ делают ряд разреженным.
- */
 function isSparseMonthlySeries(values) {
   if (!Array.isArray(values)) {
     return false;
@@ -958,11 +796,6 @@ function isSparseMonthlySeries(values) {
     gaps.push(indexes[i] - indexes[i - 1]);
   }
 
-  /*
-   * Используем медианный интервал. Поэтому несколько случайно
-   * пропущенных месяцев в ежемесячном ряду не включают маркеры
-   * на всём графике.
-   */
   gaps.sort((a, b) => a - b);
 
   const middle = Math.floor(gaps.length / 2);
@@ -973,21 +806,10 @@ function isSparseMonthlySeries(values) {
   return medianGap > 1;
 }
 
+
 /* ============================================================
    Нормализация в проценты
    ============================================================ */
-
-/*
- * В процентном режиме:
- *
- * 100% = значение ряда в начальной точке выбранного диапазона.
- *
- * Например:
- *   2020 = 100%
- *   2025 = 145%
- *
- * Для каждого ряда точка отсчёта определяется независимо.
- */
 
 function normalizeToPercent(values, baseIndex) {
   if (!Array.isArray(values)) {
@@ -996,9 +818,6 @@ function normalizeToPercent(values, baseIndex) {
 
   let reference = null;
 
-  /*
-   * Ищем первое доступное значение начиная с baseIndex.
-   */
   for (let i = baseIndex; i < values.length; i++) {
     const value = values[i];
 
@@ -1011,10 +830,6 @@ function normalizeToPercent(values, baseIndex) {
     }
   }
 
-  /*
-   * Если в правой части данных значения нет,
-   * ищем вообще первое доступное значение.
-   */
   if (reference == null) {
     for (let i = 0; i < values.length; i++) {
       const value = values[i];
@@ -1092,16 +907,10 @@ function formatValue(value, meta, percentMode = false) {
 
   const unit = getDisplayUnit(meta);
 
-  /*
-   * Денежные показатели.
-   */
   if (isMoneySeries(meta)) {
     return `${formatNumber(number, 0)} ${unit}`;
   }
 
-  /*
-   * Количество сделок / квартир.
-   */
   if (
     unit === "шт." ||
     unit === "шт" ||
@@ -1110,9 +919,6 @@ function formatValue(value, meta, percentMode = false) {
     return `${formatNumber(number, 0)} ${unit}`;
   }
 
-  /*
-   * Общий случай.
-   */
   if (unit) {
     return `${formatNumber(number, 2)} ${unit}`;
   }
@@ -1215,13 +1021,6 @@ function buildCheckboxPanel() {
 
     checkbox.addEventListener("change", () => {
       state.visible[meta.key] = checkbox.checked;
-
-      /*
-       * При любом изменении чекбоксов пользователь начинает новый
-       * просмотр набора показателей, поэтому показываем всю историю
-       * выбранных рядов. Это отличается от самого первого открытия
-       * сайта: при открытии действует стандартный диапазон 10 лет.
-       */
       setZoomByPreset("all");
     });
 
@@ -1482,10 +1281,6 @@ function getSeasonalitySeries(meta) {
           : Number(value);
       });
 
-      /*
-       * Все 12 месяцев отдаём в график целиком: видимое окно задаёт
-       * dataZoom-слайдер. Интерполируем только пропуски внутри года.
-       */
       const showOriginalPoints = isSparseMonthlySeries(data);
       let seriesData = interpolateMonthlyValues(data);
 
@@ -1502,7 +1297,6 @@ function getSeasonalitySeries(meta) {
           return null;
         };
 
-        /* 100% = первая точка внутри выбранного окна. */
         const reference =
           findReference(state.seasonalityMonthStart) ?? findReference(0);
 
@@ -1552,7 +1346,6 @@ function getSeasonalitySeries(meta) {
       };
     });
 
-  /* В процентном режиме рисуем пунктир на уровне 100%. */
   if (state.seasonalityMode === "percent" && result.length) {
     result[0].markLine = buildBaselineMarkLine();
   }
@@ -1669,11 +1462,6 @@ function buildSeasonalityOption() {
       containLabel: false,
     },
 
-    /*
-     * Отключаем автоматическую подсветку (emphasis) всех рядов,
-     * которую ECharts включает при tooltip.trigger = "axis".
-     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
-     */
     axisPointer: {
       triggerEmphasis: false,
     },
@@ -1767,11 +1555,6 @@ function renderSeasonality() {
 
 /* ============================================================
    Таймлайн (dataZoom) графика сезонности
-   ============================================================
-   Собран по тому же принципу, что и под первым графиком:
-   нижний slider (те же размеры и цвета) + на компьютере
-   inside-зум мышью. Границы окна хранятся как индексы месяцев
-   0..11 (для Deep Link), а в ECharts передаются в процентах.
    ============================================================ */
 
 const SEASONALITY_MAX_INDEX = 11;
@@ -1796,7 +1579,6 @@ function seasonalityPercentToIndex(percent) {
 function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
-  /* Базовый slider ECharts — без кастомных настроек. */
   return [
     {
       type: "slider",
@@ -1842,7 +1624,6 @@ function wireSeasonalityDataZoom() {
     state.seasonalityMonthEnd = end;
     state.seasonalityMonthRangeInitialized = true;
 
-    /* В процентном режиме пересчитываем базу 100% от левого края. */
     if (state.seasonalityMode === "percent") {
       const meta = metaByKey(state.seasonalityKey);
 
@@ -1889,15 +1670,6 @@ function initializeVisibility() {
     state.visible[meta.key] = false;
   });
 
-  /*
-   * Показатели, выбранные при первом открытии сайта.
-   * Используем ключи из data.json, а не подписи.
-   *
-   * По умолчанию:
-   *   - средняя МИНСК
-   *   - средняя ПО СТРАНЕ
-   *   - курс USD/BYN
-   */
   const defaultKeys = new Set([
     "средняя_средняя_минск",
     "средняя_средняя_по_стране",
@@ -1919,19 +1691,12 @@ function initializeVisibility() {
 function findDefaultZoomStart() {
   const months = DATA.months;
 
-  /*
-   * Для V1 по умолчанию показываем 2025-01 -> последняя дата.
-   */
   const index = months.indexOf("2025-01");
 
   if (index >= 0 && months.length > 1) {
     return (index / (months.length - 1)) * 100;
   }
 
-  /*
-   * Если 2025-01 отсутствует,
-   * показываем последние 24 месяца.
-   */
   const fallbackStart = Math.max(0, months.length - 24);
 
   return months.length > 1
@@ -1977,10 +1742,6 @@ function updateTooltipHighlight(chartContainer, activeSeriesId) {
 function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   if (!chartInstance || !chartElement) return;
 
-  /*
-   * На тач-экране касание графика только показывает тултип:
-   * подсветку отдельных линий не включаем.
-   */
   if (IS_TOUCH) return;
 
   let rafId = null;
@@ -1997,10 +1758,8 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
       state.hoveredSeasonalitySeriesId = seriesId;
     }
 
-    // Мгновенно обновляем классы в открытом тултипе без его перемещения
     updateTooltipHighlight(chartElement, seriesId);
 
-    // Подсвечиваем линию на самом графике
     try {
       if (prevId) {
         chartInstance.dispatchAction({
@@ -2023,7 +1782,6 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
     }
   }
 
-  // Нативное событие наведения ECharts на элемент ряда
   chartInstance.on("mouseover", (params) => {
     if (params && params.componentType === "series") {
       const id = params.seriesId || params.seriesName;
@@ -2033,7 +1791,6 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
     }
   });
 
-  // Расчёт приближения курсора к линиям на графике (допуск ~24px для лёгкого считывания)
   if (chartInstance.getZr) {
     chartInstance.getZr().on("mousemove", (e) => {
       if (rafId) {
@@ -2073,8 +1830,8 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
         }
 
         const dataX = coord[0];
-        const THRESHOLD = 24; // пикселей по вертикали для комфортного попадания
-        const HYSTERESIS = 4; // гистерезис против мерцания при близких/пересекающихся линиях
+        const THRESHOLD = 24;
+        const HYSTERESIS = 4;
 
         let minDistance = Infinity;
         let bestSeriesId = null;
@@ -2142,7 +1899,6 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
           }
         });
 
-        // Если ранее подсвеченная линия ещё близка к курсору — сохраняем её
         if (
           lastHoveredId &&
           activeSeriesDistance <= THRESHOLD &&
@@ -2226,17 +1982,6 @@ function buildSeries() {
       metaIndex < 0 ? 0 : metaIndex
     );
 
-    /*
-     * Правая ось:
-     *
-     * В абсолютном режиме:
-     *   деньги -> левая ось
-     *   проценты -> правая
-     *   USD/BYN -> правая
-     *   количество -> левая
-     *
-     * В процентном режиме всё находится на одной оси.
-     */
     let yAxisIndex = 0;
 
     if (state.mode === "absolute") {
@@ -2248,13 +1993,6 @@ function buildSeries() {
       }
     }
 
-    /*
-     * Маркеры показываем только на рядах, которые фактически
-     * публикуются реже одного раза в месяц.
-     *
-     * Важно: пропуск одного/нескольких месяцев в обычном
-     * ежемесячном ряду НЕ превращает его в точечный график.
-     */
     const showOriginalPoints =
       isAnnualSeries(meta) ||
       isSparseMonthlySeries(rawValues);
@@ -2272,11 +2010,6 @@ function buildSeries() {
 
       yAxisIndex,
 
-      /*
-       * Маркер определяется для КАЖДОЙ точки отдельно.
-       * Поэтому при любом диапазоне видны все реальные
-       * наблюдения, а интерполированные точки маркера не имеют.
-       */
       showSymbol: showOriginalPoints,
       showAllSymbol: showOriginalPoints,
       symbol: showOriginalPoints
@@ -2296,11 +2029,6 @@ function buildSeries() {
 
       connectNulls: true,
 
-      /*
-       * LTTB отключаем для рядов с интерполяцией: sampling
-       * может выбрасывать исходные точки, из-за чего количество
-       * видимых маркеров становилось неправильным.
-       */
       sampling: hasInterpolatedValues ? undefined : "lttb",
 
       triggerLineEvent: true,
@@ -2327,15 +2055,10 @@ function buildSeries() {
         isRateSeries(meta)
       ) ? 5 : 3,
 
-      /*
-       * Годовые показатели ставим в декабре,
-       * поэтому точки явно не соединяем через пустые месяцы.
-       */
       symbolKeepAspect: true,
     };
   });
 
-  /* В процентном режиме рисуем пунктир на уровне 100%. */
   if (state.mode === "percent" && result.length) {
     result[0].markLine = buildBaselineMarkLine();
   }
@@ -2361,20 +2084,11 @@ function getMonthIndex(month) {
 }
 
 
-/* Отступ сетки слева/справа (одинаков для обеих сторон). */
 function getMainGridSide() {
   return state.mode === "percent" ? 34 : 38;
 }
 
 
-/*
- * Реальный видимый диапазон оси X (индексы месяцев).
- *
- * Читаем его прямо из dataZoom-модели ECharts, потому что подписи
- * оси пересчитываются в момент отрисовки — раньше, чем наш state
- * успевает обновиться. Если внутренний метод недоступен — берём
- * диапазон из state.
- */
 function getLiveXWindow() {
   const last = DATA.months.length - 1;
   let start = null;
@@ -2416,18 +2130,6 @@ function getLiveXWindow() {
 
 let xTickLayoutCache = null;
 
-/*
- * Раскладка подписей и вертикальной сетки для текущего диапазона.
- *
- *   start / end — первый и последний месяц диапазона: подписаны всегда;
- *   labels      — индексы месяцев с подписью (крайние + подходящие годы);
- *   januaries   — индексы январей внутри диапазона: на них линии сетки
- *                 (шаг сетки — 1 год).
- *
- * Между крайними подписями остаются только те годы, которые не
- * налезают друг на друга: при тесной шкале подписи через один,
- * через пять лет и т. д. (кратные годы: 2020, 2022, ...).
- */
 function getXTickLayout() {
   const [start, end] = getLiveXWindow();
   const width = chart ? chart.getWidth() : 0;
@@ -2452,7 +2154,6 @@ function getXTickLayout() {
     }
   }
 
-  /* Наименьший шаг по годам, при котором подписи не слипаются. */
   const minSpacing = X_YEAR_LABEL_PX + X_LABEL_GAP_PX;
   let step = X_YEAR_STEPS[X_YEAR_STEPS.length - 1];
 
@@ -2463,11 +2164,6 @@ function getXTickLayout() {
     }
   }
 
-  /*
-   * Крайние подписи прижаты к краям сетки (слева — по левому краю,
-   * справа — по правому), поэтому год не должен подходить к краю
-   * ближе, чем ширина крайней подписи + зазор + половина года.
-   */
   const safeEdge =
     X_EDGE_LABEL_PX + X_LABEL_GAP_PX + X_YEAR_LABEL_PX / 2;
 
@@ -2503,12 +2199,10 @@ function formatXAxisLabel(value) {
   const index = getMonthIndex(value);
   const layout = getXTickLayout();
 
-  /* Первый и последний месяц диапазона: «мар 2021». */
   if (index === layout.start || index === layout.end) {
     return `${MONTH_SHORT_RU[Number(value.slice(5, 7)) - 1]} ${value.slice(0, 4)}`;
   }
 
-  /* Промежуточные подписи — только год. */
   if (layout.labels.has(index)) {
     return value.slice(0, 4);
   }
@@ -2533,7 +2227,6 @@ function buildBaselineMarkLine() {
       type: "dashed",
     },
     emphasis: { lineStyle: { width: 1 } },
-    /* Не тускнеет, когда наведение подсвечивает другую линию. */
     blur: { lineStyle: { opacity: 1 } },
     data: [{ yAxis: 100 }],
   };
@@ -2549,10 +2242,6 @@ function buildYAxes() {
   const textTertiary = "#5B6673";
   const splitColor = "#161C24";
 
-  /*
-   * Процентный режим:
-   * одна ось.
-   */
   if (state.mode === "percent") {
     return [
       {
@@ -2585,9 +2274,6 @@ function buildYAxes() {
     ];
   }
 
-  /*
-   * Абсолютный режим.
-   */
   return [
     {
       type: "value",
@@ -2608,7 +2294,6 @@ function buildYAxes() {
         },
       },
 
-      /* Подпись под курсором: целое число */
       axisPointer: {
         label: {
           formatter: (params) => {
@@ -2654,7 +2339,6 @@ function buildYAxes() {
         },
       },
 
-      /* Подпись под курсором: два знака после запятой */
       axisPointer: {
         label: {
           formatter: (params) => {
@@ -2769,6 +2453,119 @@ function buildTooltipFormatter(params) {
    Построение основной ECharts option
    ============================================================ */
 
+/*
+ * Таймлайн (dataZoom slider) в стиле DefiLlama:
+ *   - светлый контур слота;
+ *   - mini-preview выбранных рядов (dataBackground);
+ *   - крупные ручки (handle) с кастомной иконкой;
+ *   - увеличенная высота, чтобы удобно было попадать пальцем.
+ */
+function buildMainDataZoom(months) {
+  const textTertiary = "#5B6673";
+
+  return [
+    {
+      type: "slider",
+      xAxisIndex: 0,
+
+      start: state.zoomStart,
+      end: state.zoomEnd,
+
+      brushSelect: false,
+
+      height: 44,
+      bottom: 24,
+
+      borderColor: "#3A4450",
+      borderWidth: 1,
+      borderRadius: 6,
+
+      backgroundColor: "#0D1218",
+
+      fillerColor: "rgba(61,220,132,0.10)",
+
+      /* Крупные ручки. Иконка — «плашка с насечками». */
+      handleSize: 40,
+      handleStyle: {
+        color: "#2A3440",
+        borderColor: "#8A97A6",
+        borderWidth: 1,
+        shadowBlur: 0,
+        shadowColor: "transparent",
+      },
+      handleIcon:
+        "path://M-2,0 H2 V40 H-2 Z " +
+        "M-1.4,8 V32 M0,8 V32 M1.4,8 V32",
+
+      /* «Шапка» для перетаскивания всего окна. */
+      moveHandleSize: 12,
+      moveHandleStyle: {
+        color: "#3A4450",
+        opacity: 0.75,
+        borderColor: "#5B6673",
+        borderWidth: 0,
+      },
+
+      /* Mini-preview рядов внутри слота. */
+      showDataShadow: true,
+      dataBackground: {
+        lineStyle: {
+          color: "#5B6673",
+          width: 0.8,
+          opacity: 0.55,
+        },
+        areaStyle: {
+          color: "#3DDC84",
+          opacity: 0.10,
+        },
+      },
+      selectedDataBackground: {
+        lineStyle: {
+          color: "#3DDC84",
+          width: 1,
+          opacity: 0.9,
+        },
+        areaStyle: {
+          color: "#3DDC84",
+          opacity: 0.24,
+        },
+      },
+
+      textStyle: {
+        color: textTertiary,
+        fontFamily: "var(--font-mono)",
+        fontSize: 10,
+      },
+
+      labelFormatter: (value, valueStr) => {
+        const index = Math.round(value);
+        const month = months[index];
+        return month || valueStr;
+      },
+    },
+
+    ...(IS_TOUCH
+      ? []
+      : [
+          {
+            type: "inside",
+
+            xAxisIndex: 0,
+
+            start: state.zoomStart,
+            end: state.zoomEnd,
+
+            zoomOnMouseWheel: true,
+
+            moveOnMouseMove: true,
+
+            moveOnMouseWheel: true,
+          },
+        ]),
+  ];
+}
+
+
 function buildOption() {
   const months = DATA.months;
 
@@ -2788,16 +2585,11 @@ function buildOption() {
       left: getMainGridSide(),
       right: getMainGridSide(),
       top: 42,
-      bottom: 84,
+      bottom: 96,
 
       containLabel: false,
     },
 
-    /*
-     * Отключаем автоматическую подсветку (emphasis) всех рядов,
-     * которую ECharts включает при tooltip.trigger = "axis".
-     * Подсветкой отдельной линии управляет attachLineHoverHighlight().
-     */
     axisPointer: {
       triggerEmphasis: false,
     },
@@ -2849,12 +2641,6 @@ function buildOption() {
 
         hideOverlap: true,
 
-        /*
-         * Подписи задаём явно: первый и последний месяц диапазона
-         * всегда видны, между ними — годы, которые помещаются.
-         * (Автоматический шаг ECharts мог целиком пропускать январи,
-         * и оставалась одна подпись.)
-         */
         interval: (index) => getXTickLayout().labels.has(index),
         showMinLabel: true,
         showMaxLabel: true,
@@ -2874,7 +2660,6 @@ function buildOption() {
         show: false,
       },
 
-      /* Вертикальная сетка: одна линия на каждый январь (шаг — 1 год). */
       splitLine: {
         show: true,
         showMinLine: false,
@@ -2889,78 +2674,7 @@ function buildOption() {
 
     yAxis: buildYAxes(),
 
-    dataZoom: [
-      {
-        type: "slider",
-
-        xAxisIndex: 0,
-
-        start: state.zoomStart,
-        end: state.zoomEnd,
-
-        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
-        brushSelect: false,
-
-        height: 24,
-
-        bottom: 30,
-
-        borderColor: "#232B36",
-
-        backgroundColor: "#0A0E13",
-
-        fillerColor: "rgba(61,220,132,0.10)",
-
-        handleStyle: {
-          color: "#1A222B",
-          borderColor: "#5B6673",
-        },
-
-        moveHandleStyle: {
-          color: "#2A3440",
-        },
-
-        textStyle: {
-          color: textTertiary,
-
-          fontFamily: "var(--font-mono)",
-
-          fontSize: 11,
-        },
-
-        labelFormatter: (value, valueStr) => {
-          const index = Math.round(value);
-
-          const month = months[index];
-
-          return month || valueStr;
-        },
-      },
-
-      /*
-       * "inside" (колесо / перетаскивание / pinch по самому графику)
-       * подключаем только на устройствах с мышью. На тач-экране
-       * управление диапазоном — только нижним ползунком.
-       */
-      ...(IS_TOUCH
-        ? []
-        : [
-            {
-              type: "inside",
-
-              xAxisIndex: 0,
-
-              start: state.zoomStart,
-              end: state.zoomEnd,
-
-              zoomOnMouseWheel: true,
-
-              moveOnMouseMove: true,
-
-              moveOnMouseWheel: true,
-            },
-          ]),
-    ],
+    dataZoom: buildMainDataZoom(months),
 
     series: buildSeries(),
   };
@@ -3419,7 +3133,6 @@ function setZoomByPreset(preset) {
       (bounds.start / 100) * denominator
     );
 
-    /* Если данных меньше выбранного периода — показываем всё. */
     const startIndex = Math.max(
       minIndex,
       maxIndex - periodMonths + 1
@@ -3429,10 +3142,6 @@ function setZoomByPreset(preset) {
     state.zoomEnd = bounds.end;
   }
 
-  /*
-   * После выбора пресета правая граница становится новой
-   * фиксированной точкой ручного зума.
-   */
   state.zoomAnchorEnd = state.zoomEnd;
   state.zoomPreset = preset;
   state.lastZoomStart = state.zoomStart;
@@ -3501,12 +3210,6 @@ function resetZoom() {
    ============================================================ */
 
 function wireDataZoom() {
-  /*
-   * ECharts не передаёт в событии dataZoom надёжный признак того,
-   * была ли граница изменена колесом или перетаскиванием ручки.
-   * Поэтому отдельно запоминаем нативное событие wheel.
-   * dataZoom от колеса приходит сразу после него.
-   */
   if (chart && chart.getZr) {
     chart.getZr().on("mousewheel", () => {
       state.wheelZoomAt = Date.now();
@@ -3544,9 +3247,6 @@ function wireDataZoom() {
       [start, end] = [end, start];
     }
 
-    /*
-     * Служебное второе событие после dispatchAction.
-     */
     if (state.correctingZoom) {
       state.correctingZoom = false;
       state.zoomStart = start;
@@ -3568,23 +3268,12 @@ function wireDataZoom() {
     const endChanged =
       Math.abs(end - previousEnd) > 0.000001;
 
-    /*
-     * Колесо определяем по отдельному событию ZRender.
-     * Небольшое окно нужно только для связывания wheel -> dataZoom.
-     */
     const isWheelZoom =
       Date.now() - state.wheelZoomAt < 100;
 
-    /*
-     * Любое ручное изменение отменяет подсветку пресета.
-     */
     state.zoomPreset = null;
     updateZoomPresetButtons();
 
-    /*
-     * На тач-экране диапазон меняется только нижним ползунком
-     * (ручки или перетаскивание всего окна) — принимаем как есть.
-     */
     if (IS_TOUCH) {
       state.zoomStart = start;
       state.zoomEnd = end;
@@ -3594,14 +3283,6 @@ function wireDataZoom() {
       return;
     }
 
-    /*
-     * Если это НЕ колесо, значит пользователь физически двигает
-     * ручку slider или весь выделенный диапазон. Такие изменения
-     * принимаем без коррекции.
-     *
-     * Это принципиально важно: правую ручку можно двигать ЛКМ,
-     * но zoom колесом при этом продолжает держать правый край.
-     */
     if (!isWheelZoom && startChanged && !endChanged) {
       state.zoomStart = start;
       state.zoomEnd = previousEnd;
@@ -3620,11 +3301,6 @@ function wireDataZoom() {
       return;
     }
 
-    /*
-     * Если обе границы изменились на одинаковую величину,
-     * это перемещение всего выделенного диапазона.
-     * Оставляем его как есть — это не изменение масштаба.
-     */
     if (
       !isWheelZoom &&
       startChanged &&
@@ -3639,18 +3315,6 @@ function wireDataZoom() {
       return;
     }
 
-    /*
-     * Обе границы изменились и ширина изменилась — это zoom
-     * колесом мыши / gesture.
-     *
-     * Zoom in:
-     *   правая граница фиксирована;
-     *   двигается только левая.
-     *
-     * Zoom out:
-     *   сначала двигается левая граница влево;
-     *   после достижения 0% начинает двигаться правая.
-     */
     let correctedStart;
     let correctedEnd;
 
@@ -3713,12 +3377,8 @@ async function init() {
 
     DATA = await loadData();
 
-    /*
-     * Сначала создаём visibility state.
-     */
     initializeVisibility();
 
-    /* Сезонность по умолчанию: курс USD и все доступные годы. */
     const defaultSeasonalityMeta = metaByKey(state.seasonalityKey);
     if (defaultSeasonalityMeta) {
       state.seasonalityYears = new Set(
@@ -3727,17 +3387,8 @@ async function init() {
       state.seasonalityYearsInitialized = true;
     }
 
-    /*
-     * Если ссылка содержит Deep Link — восстанавливаем состояние
-     * только того графика, который был источником ссылки.
-     */
     const deepLinkSource = restoreDeepLinkState();
 
-    /*
-     * По умолчанию показываем последние 10 лет доступных данных
-     * выбранных показателей. Если данных меньше 10 лет,
-     * показываем весь доступный диапазон.
-     */
     if (deepLinkSource !== "main") {
       const defaultBounds = getVisibleSeriesBounds();
 
@@ -3761,20 +3412,10 @@ async function init() {
       state.zoomPreset = "10y";
     }
 
-    /*
-     * Информация "данные по..."
-     */
     updateDataUpTo();
 
-    /*
-     * Подсказка процентного режима.
-     */
     updatePercentHint();
 
-    /*
-     * На мобильном экране панель показателей
-     * по умолчанию сворачиваем.
-     */
     const controlsPanel =
       document.getElementById("controlsPanel");
 
@@ -3805,9 +3446,6 @@ async function init() {
       seasonalityYearsPanel.removeAttribute("open");
     }
 
-    /*
-     * Создаём график.
-     */
     const chartElement =
       document.getElementById("chart");
 
@@ -3850,21 +3488,12 @@ async function init() {
       }
     );
 
-    /*
-     * Панели показателей.
-     */
     buildCheckboxPanel();
     buildSeasonalityCheckboxPanel();
 
-    /*
-     * Первый рендер.
-     */
     render();
     renderSeasonality();
 
-    /*
-     * Подключение подсветки линий и соответствующих строк в тултипе.
-     */
     attachLineHoverHighlight(chart, chartElement, "main");
     attachLineHoverHighlight(
       seasonalityChart,
@@ -3872,9 +3501,6 @@ async function init() {
       "seasonality"
     );
 
-    /*
-     * Переключатели первого графика.
-     */
     wireSegmented(
       "currencyToggle",
       (value) => {
@@ -3892,9 +3518,6 @@ async function init() {
       }
     );
 
-    /*
-     * Те же переключатели для блока сезонности.
-     */
     wireSegmented(
       "seasonalityCurrencyToggle",
       (value) => {
@@ -3911,15 +3534,9 @@ async function init() {
       }
     );
 
-    /*
-     * Кнопки Deep Link.
-     */
     wireDeepLinkButton("shareMainChart", "main");
     wireDeepLinkButton("shareSeasonalityChart", "seasonality");
 
-    /*
-     * Быстрые диапазоны графика.
-     */
     const zoomPresets = document.getElementById("zoomPresets");
 
     if (zoomPresets) {
@@ -3932,13 +3549,6 @@ async function init() {
 
     updateZoomPresetButtons();
 
-    /*
-     * Кнопка "Очистить".
-     *
-     * Кнопка находится внутри <summary>, поэтому явно отменяем
-     * стандартное поведение summary и не даём клику менять
-     * состояние <details>.
-     */
     const clearButton =
       document.getElementById("clearIndicators");
 
@@ -3971,9 +3581,6 @@ async function init() {
       });
     }
 
-    /*
-     * Кнопка "Показать всю историю".
-     */
     const resetButton =
       document.getElementById("resetZoom");
 
@@ -3984,15 +3591,9 @@ async function init() {
       );
     }
 
-    /*
-     * DataZoom.
-     */
     wireDataZoom();
     wireSeasonalityDataZoom();
 
-    /*
-     * Responsive.
-     */
     window.addEventListener(
       "resize",
       () => {
@@ -4008,10 +3609,6 @@ async function init() {
 
     focusDeepLinkSource(deepLinkSource);
 
-    /*
-     * Небольшая диагностическая информация
-     * в console — полезна на этапе V1.
-     */
     console.info(
       "stats.by V1 initialized",
       {
@@ -4033,10 +3630,6 @@ async function init() {
       error
     );
 
-    /*
-     * Не оставляем пользователя с пустым графиком
-     * без объяснения причины.
-     */
     const chartElement =
       document.getElementById("chart");
 
