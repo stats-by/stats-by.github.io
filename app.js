@@ -1796,55 +1796,13 @@ function seasonalityPercentToIndex(percent) {
 function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
-  /*
-   * Только slider — как под первым графиком (тот же внешний вид,
-   * выделение протяжкой отключено). Зума колесом и перетаскивания
-   * самого графика нет ни на одном устройстве: диапазон меняется
-   * только ползунком. Логики «правый край держится» здесь нет.
-   */
-  const monthLabels = getSeasonalityMonths();
-
+  /* Базовый slider ECharts — без кастомных настроек. */
   return [
     {
       type: "slider",
-
       xAxisIndex: 0,
-
       start: seasonalityIndexToPercent(state.seasonalityMonthStart),
       end: seasonalityIndexToPercent(state.seasonalityMonthEnd),
-
-      brushSelect: false,
-
-      height: 24,
-
-      bottom: 30,
-
-      borderColor: "#232B36",
-
-      backgroundColor: "#0A0E13",
-
-      fillerColor: "rgba(61,220,132,0.10)",
-
-      handleStyle: {
-        color: "#1A222B",
-        borderColor: "#5B6673",
-      },
-
-      moveHandleStyle: {
-        color: "#2A3440",
-      },
-
-      textStyle: {
-        color: "#5B6673",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-      },
-
-      labelFormatter: (value, valueStr) => {
-        const index = Math.round(value);
-
-        return monthLabels[index] || valueStr;
-      },
     },
   ];
 }
