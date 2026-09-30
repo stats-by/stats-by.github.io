@@ -54,13 +54,19 @@
 
       <div id="chart" class="chart" role="img" aria-label="График зарплат, курса доллара и цены жилья по месяцам"></div>
 
-      <div class="chart-timeline" id="chartTimeline">
-        <div class="chart-timeline-track" id="chartTimelineTrack">
-          <div class="chart-timeline-preview" id="chartTimelinePreview" aria-hidden="true"></div>
-          <div class="chart-timeline-window" id="chartTimelineWindow">
-            <div class="chart-timeline-handle" data-role="start" aria-label="Левая граница диапазона"></div>
-            <div class="chart-timeline-handle" data-role="end" aria-label="Правая граница диапазона"></div>
-          </div>
+      <div class="timeline" id="mainTimeline">
+        <div class="timeline-track" id="timelineTrack">
+          <div class="timeline-fill" id="timelineFill"></div>
+          <div class="timeline-handle timeline-handle-start" id="timelineHandleStart"
+               role="slider" tabindex="0" aria-label="Левая граница диапазона"
+               aria-valuemin="0" aria-valuemax="100"></div>
+          <div class="timeline-handle timeline-handle-end" id="timelineHandleEnd"
+               role="slider" tabindex="0" aria-label="Правая граница диапазона"
+               aria-valuemin="0" aria-valuemax="100"></div>
+        </div>
+        <div class="timeline-scale">
+          <span class="timeline-label" id="timelineLabelStart"></span>
+          <span class="timeline-label" id="timelineLabelEnd"></span>
         </div>
       </div>
 
