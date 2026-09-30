@@ -163,13 +163,6 @@ const state = {
   zoomAnchorEnd: 100,
 
   /*
-   * Идёт перетаскивание ручек кастомного таймлайна.
-   * Пока флаг поднят, обработчик dataZoom принимает
-   * границы как есть, без коррекции колёсного зума.
-   */
-  timelineDragActive: false,
-
-  /*
    * Признак именно zoom колесом/gesture.
    * Нужен для того, чтобы не путать его с физическим
    * перетаскиванием ручек slider.
@@ -2780,6 +2773,7 @@ function buildOption() {
   const months = DATA.months;
 
   const textSecondary = "#8A97A6";
+  const textTertiary = "#5B6673";
 
   return {
     backgroundColor: "transparent",
@@ -2794,7 +2788,7 @@ function buildOption() {
       left: getMainGridSide(),
       right: getMainGridSide(),
       top: 42,
-      bottom: 46,
+      bottom: 84,
 
       containLabel: false,
     },
@@ -2896,21 +2890,51 @@ function buildOption() {
     yAxis: buildYAxes(),
 
     dataZoom: [
-      /*
-       * Стандартный slider скрыт (show: false): вместо него под
-       * графиком рисуется кастомный таймлайн (#mainTimeline).
-       * Сам компонент оставлен — через него идёт вся
-       * синхронизация диапазона (dispatchAction / события).
-       */
       {
         type: "slider",
-
-        show: false,
 
         xAxisIndex: 0,
 
         start: state.zoomStart,
         end: state.zoomEnd,
+
+        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
+        brushSelect: false,
+
+        height: 24,
+
+        bottom: 30,
+
+        borderColor: "#232B36",
+
+        backgroundColor: "#0A0E13",
+
+        fillerColor: "rgba(61,220,132,0.10)",
+
+        handleStyle: {
+          color: "#1A222B",
+          borderColor: "#5B6673",
+        },
+
+        moveHandleStyle: {
+          color: "#2A3440",
+        },
+
+        textStyle: {
+          color: textTertiary,
+
+          fontFamily: "var(--font-mono)",
+
+          fontSize: 11,
+        },
+
+        labelFormatter: (value, valueStr) => {
+          const index = Math.round(value);
+
+          const month = months[index];
+
+          return month || valueStr;
+        },
       },
 
       /*
@@ -2964,431 +2988,6 @@ function render() {
     document.getElementById("chart"),
     state.hoveredMainSeriesId
   );
-
-  /* Позиции и подписи кастомного таймлайна. */
-  syncTimelineMargins();
-  updateTimelineUI(state.zoomStart, state.zoomEnd);
-}
-
-
-/* ============================================================
-   Кастомный таймлайн под первым графиком
-   ============================================================
-   Стандартный slider ECharts скрыт (show: false), а вместо
-   него диапазоном управляет HTML-ползунок #mainTimeline:
-
-     - у ручек зона нажатия 44×44px — на тач-экране по ним
-       легко попасть (основная претензия к slider ECharts);
-     - середину выбранного диапазона можно тянуть целиком;
-     - тап по пустой части трека подтягивает ближайшую границу;
-     - под треком — подписи крайних дат диапазона.
-
-   Синхронизация с графиком идёт через скрытый dataZoom:
-   таймлайн вызывает dispatchAction("dataZoom"), а все остальные
-   источники (колесо мыши, пресеты, deep link) приходят сюда
-   через событие "dataZoom" и обновляют позиции ручек.
-   ============================================================ */
-
-/* Минимальная ширина окна диапазона (в месяцах). */
-const TIMELINE_MIN_MONTHS = 2;
-
-let timelineEls = null;
-let timelineDrag = null;
-let timelineRaf = null;
-
-
-function getTimelineMinSpan() {
-  if (!DATA || !DATA.months || DATA.months.length < 2) {
-    return 0;
-  }
-
-  return (TIMELINE_MIN_MONTHS / (DATA.months.length - 1)) * 100;
-}
-
-
-function formatTimelineLabel(percent) {
-  const last = DATA.months.length - 1;
-
-  const index = Math.max(
-    0,
-    Math.min(last, Math.round((Number(percent) / 100) * last))
-  );
-
-  const month = DATA.months[index];
-
-  if (!isYearMonth(month)) {
-    return String(month || "");
-  }
-
-  return `${MONTH_SHORT_RU[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
-}
-
-
-function updateTimelineUI(start, end) {
-  if (!timelineEls || !DATA) {
-    return;
-  }
-
-  start = Math.max(0, Math.min(100, Number(start)));
-  end = Math.max(0, Math.min(100, Number(end)));
-
-  if (end < start) {
-    [start, end] = [end, start];
-  }
-
-  timelineEls.fill.style.left = `${start}%`;
-  timelineEls.fill.style.width = `${Math.max(0, end - start)}%`;
-  timelineEls.handleStart.style.left = `${start}%`;
-  timelineEls.handleEnd.style.left = `${end}%`;
-
-  const startText = formatTimelineLabel(start);
-  const endText = formatTimelineLabel(end);
-
-  timelineEls.labelStart.textContent = startText;
-  timelineEls.labelEnd.textContent = endText;
-
-  timelineEls.handleStart.setAttribute("aria-valuenow", String(Math.round(start)));
-  timelineEls.handleStart.setAttribute("aria-valuetext", startText);
-  timelineEls.handleEnd.setAttribute("aria-valuenow", String(Math.round(end)));
-  timelineEls.handleEnd.setAttribute("aria-valuetext", endText);
-}
-
-
-/*
- * Таймлайн выравнивается по краям области построения графика
- * (отступы сетки зависят от режима: абсолютный / проценты).
- */
-function syncTimelineMargins() {
-  if (!timelineEls) {
-    return;
-  }
-
-  const side = getMainGridSide();
-
-  timelineEls.root.style.marginLeft = `${side}px`;
-  timelineEls.root.style.marginRight = `${side}px`;
-}
-
-
-function getTimelinePercentFromEvent(event) {
-  const rect = timelineEls.track.getBoundingClientRect();
-
-  if (!rect.width) {
-    return 0;
-  }
-
-  const x = event.clientX - rect.left;
-
-  return Math.max(0, Math.min(100, (x / rect.width) * 100));
-}
-
-
-function dispatchTimelineZoom(start, end) {
-  if (!chart) {
-    return;
-  }
-
-  chart.dispatchAction({
-    type: "dataZoom",
-    dataZoomIndex: IS_TOUCH ? [0] : [0, 1],
-    start,
-    end,
-  });
-}
-
-
-function applyTimelineDrag(percent) {
-  if (!timelineDrag) {
-    return;
-  }
-
-  const minSpan = getTimelineMinSpan();
-
-  let start = timelineDrag.originStart;
-  let end = timelineDrag.originEnd;
-
-  if (timelineDrag.type === "start") {
-    start = Math.max(0, Math.min(percent, end - minSpan));
-  } else if (timelineDrag.type === "end") {
-    end = Math.min(100, Math.max(percent, start + minSpan));
-  } else {
-    /* Перетаскивание всего окна диапазона. */
-    const width = end - start;
-    const delta = percent - timelineDrag.grabPercent;
-
-    start = Math.max(0, Math.min(100 - width, start + delta));
-    end = start + width;
-  }
-
-  dispatchTimelineZoom(start, end);
-  updateTimelineUI(start, end);
-}
-
-
-function onTimelinePointerMove(event) {
-  if (!timelineDrag || event.pointerId !== timelineDrag.pointerId) {
-    return;
-  }
-
-  const percent = getTimelinePercentFromEvent(event);
-
-  if (timelineRaf) {
-    cancelAnimationFrame(timelineRaf);
-  }
-
-  timelineRaf = requestAnimationFrame(() => {
-    timelineRaf = null;
-    applyTimelineDrag(percent);
-  });
-}
-
-
-function finishTimelineDrag() {
-  if (!timelineDrag) {
-    return;
-  }
-
-  timelineDrag = null;
-  state.timelineDragActive = false;
-
-  if (timelineRaf) {
-    cancelAnimationFrame(timelineRaf);
-    timelineRaf = null;
-  }
-
-  if (timelineEls) {
-    timelineEls.root.classList.remove("is-dragging");
-  }
-
-  /*
-   * В процентном режиме 100% считается от левого края
-   * диапазона — после завершения перетаскивания
-   * пересчитываем ряды от новой точки отсчёта.
-   */
-  if (state.mode === "percent") {
-    render();
-  }
-}
-
-
-function startTimelineDrag(type, event, element) {
-  if (!chart || !DATA) {
-    return;
-  }
-
-  event.preventDefault();
-
-  if (element && typeof element.focus === "function") {
-    element.focus({ preventScroll: true });
-  }
-
-  state.timelineDragActive = true;
-
-  const minSpan = getTimelineMinSpan();
-
-  let start = state.zoomStart;
-  let end = state.zoomEnd;
-
-  /*
-   * Тап по пустой части трека: ближайшая граница сразу
-   * переносится в точку касания, и дальше её можно тянуть,
-   * не отрывая палец.
-   */
-  if (type === "track") {
-    const percent = getTimelinePercentFromEvent(event);
-
-    if (Math.abs(percent - start) <= Math.abs(percent - end)) {
-      type = "start";
-      start = Math.max(0, Math.min(percent, end - minSpan));
-    } else {
-      type = "end";
-      end = Math.min(100, Math.max(percent, start + minSpan));
-    }
-
-    dispatchTimelineZoom(start, end);
-    updateTimelineUI(start, end);
-  }
-
-  timelineDrag = {
-    type,
-    pointerId: event.pointerId,
-    grabPercent: getTimelinePercentFromEvent(event),
-    originStart: start,
-    originEnd: end,
-  };
-
-  if (timelineEls) {
-    timelineEls.root.classList.add("is-dragging");
-  }
-
-  if (element && element.setPointerCapture) {
-    try {
-      element.setPointerCapture(event.pointerId);
-    } catch (error) {
-      /* Некритично: без capture драг оборвётся у края экрана. */
-    }
-  }
-}
-
-
-/* Клавиатура: стрелки = ±1 месяц, Shift+стрелки = ±1 год. */
-function onTimelineHandleKeydown(event) {
-  if (!DATA || !DATA.months || DATA.months.length < 2) {
-    return;
-  }
-
-  const isStart = event.currentTarget === timelineEls.handleStart;
-  const monthStep = 100 / (DATA.months.length - 1);
-  const step = (event.shiftKey ? 12 : 1) * monthStep;
-  const minSpan = getTimelineMinSpan();
-
-  let start = state.zoomStart;
-  let end = state.zoomEnd;
-  let handled = true;
-
-  switch (event.key) {
-    case "ArrowLeft":
-    case "ArrowDown":
-      if (isStart) {
-        start = Math.max(0, start - step);
-      } else {
-        end = Math.max(start + minSpan, end - step);
-      }
-      break;
-
-    case "ArrowRight":
-    case "ArrowUp":
-      if (isStart) {
-        start = Math.min(end - minSpan, start + step);
-      } else {
-        end = Math.min(100, end + step);
-      }
-      break;
-
-    case "Home":
-      if (isStart) {
-        start = 0;
-      } else {
-        end = Math.min(100, start + minSpan);
-      }
-      break;
-
-    case "End":
-      if (isStart) {
-        start = Math.max(0, end - minSpan);
-      } else {
-        end = 100;
-      }
-      break;
-
-    default:
-      handled = false;
-  }
-
-  if (!handled) {
-    return;
-  }
-
-  event.preventDefault();
-
-  dispatchTimelineZoom(start, end);
-  updateTimelineUI(start, end);
-
-  if (state.mode === "percent") {
-    render();
-  }
-}
-
-
-function initMainTimeline() {
-  const root = document.getElementById("mainTimeline");
-
-  if (!root || !chart) {
-    return;
-  }
-
-  timelineEls = {
-    root,
-    track: root.querySelector(".timeline-track"),
-    fill: root.querySelector(".timeline-fill"),
-    handleStart: root.querySelector(".timeline-handle-start"),
-    handleEnd: root.querySelector(".timeline-handle-end"),
-    labelStart: root.querySelector("#timelineLabelStart"),
-    labelEnd: root.querySelector("#timelineLabelEnd"),
-  };
-
-  const dragSources = [
-    ["start", timelineEls.handleStart],
-    ["end", timelineEls.handleEnd],
-    ["move", timelineEls.fill],
-    ["track", timelineEls.track],
-  ];
-
-  dragSources.forEach(([type, element]) => {
-    if (!element) {
-      return;
-    }
-
-    element.addEventListener("pointerdown", (event) => {
-      if (event.button !== undefined && event.button > 0) {
-        return;
-      }
-
-      /*
-       * Тап по ручке / заливке, всплывший до трека,
-       * не должен трактоваться как тап по пустому месту.
-       */
-      if (type === "track" && event.target !== timelineEls.track) {
-        return;
-      }
-
-      startTimelineDrag(type, event, element);
-    });
-
-    /*
-     * Pointer capture держит события на элементе, поэтому
-     * move / up слушаем прямо на нём.
-     */
-    element.addEventListener("pointermove", onTimelinePointerMove);
-    element.addEventListener("pointerup", finishTimelineDrag);
-    element.addEventListener("pointercancel", finishTimelineDrag);
-  });
-
-  timelineEls.handleStart.addEventListener(
-    "keydown",
-    onTimelineHandleKeydown
-  );
-  timelineEls.handleEnd.addEventListener(
-    "keydown",
-    onTimelineHandleKeydown
-  );
-
-  /*
-   * Колесо мыши, пресеты, deep link: позиции ручек
-   * подтягиваем из фактического состояния dataZoom.
-   */
-  chart.on("dataZoom", () => {
-    if (timelineDrag) {
-      return;
-    }
-
-    const option = chart.getOption();
-    const zoom = option && option.dataZoom && option.dataZoom[0];
-
-    if (!zoom) {
-      return;
-    }
-
-    const start = Number(zoom.start);
-    const end = Number(zoom.end);
-
-    if (Number.isFinite(start) && Number.isFinite(end)) {
-      updateTimelineUI(start, end);
-    }
-  });
-
-  syncTimelineMargins();
-  updateTimelineUI(state.zoomStart, state.zoomEnd);
 }
 
 
@@ -3983,11 +3582,10 @@ function wireDataZoom() {
     updateZoomPresetButtons();
 
     /*
-     * На тач-экране диапазон меняется только ползунком
+     * На тач-экране диапазон меняется только нижним ползунком
      * (ручки или перетаскивание всего окна) — принимаем как есть.
-     * То же для перетаскивания ручек кастомного таймлайна.
      */
-    if (IS_TOUCH || state.timelineDragActive) {
+    if (IS_TOUCH) {
       state.zoomStart = start;
       state.zoomEnd = end;
       state.lastZoomStart = start;
@@ -4391,11 +3989,6 @@ async function init() {
      */
     wireDataZoom();
     wireSeasonalityDataZoom();
-
-    /*
-     * Кастомный таймлайн под первым графиком.
-     */
-    initMainTimeline();
 
     /*
      * Responsive.
