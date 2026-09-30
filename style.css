@@ -2,19 +2,16 @@
    Design tokens
    ============================================================ */
 :root {
-  /* base surfaces */
   --bg: #0A0E13;
   --bg-panel: #12181F;
   --bg-panel-raised: #1A222B;
   --border: #232B36;
   --border-soft: #1A2129;
 
-  /* text */
   --text-primary: #E8ECF1;
   --text-secondary: #8A97A6;
   --text-tertiary: #5B6673;
 
-  /* series colors — warm family = income, cool family = housing, green = the rate that ties them together */
   --c-median-country: #F2B84B;
   --c-avg-country:    #F0793C;
   --c-avg-minsk:      #E14F63;
@@ -26,7 +23,6 @@
 
   --accent: var(--c-rate);
 
-  /* type */
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, "Liberation Mono", monospace;
 
@@ -42,6 +38,9 @@ html, body {
   background: var(--bg);
   color: var(--text-primary);
   font-family: var(--font-ui);
+
+  /* Убираем синюю вспышку от тапа на Android/Chrome */
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -147,6 +146,18 @@ body {
 .chart {
   width: 100%;
   height: 520px;
+
+  /* Не даём браузеру подсвечивать контейнер при тапе */
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.chart svg,
+.chart canvas {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 .hint {
@@ -356,6 +367,128 @@ input[type="checkbox"]:focus-visible {
 }
 
 /* ============================================================
+   Custom HTML timeline (замена ECharts-слайдера)
+   ============================================================ */
+.chart-timeline {
+  position: relative;
+  padding: 4px 0 6px;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+}
+
+.chart-timeline-track {
+  position: relative;
+  height: 48px;
+  background: #0D1218;
+  border: 1px solid #3A4450;
+  border-radius: 8px;
+  overflow: hidden;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.chart-timeline-preview {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.chart-timeline-preview svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.chart-timeline-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(61, 220, 132, 0.10);
+  border-left: 1px solid rgba(61, 220, 132, 0.5);
+  border-right: 1px solid rgba(61, 220, 132, 0.5);
+  box-sizing: border-box;
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+
+.chart-timeline-window.is-dragging {
+  cursor: grabbing;
+}
+
+.chart-timeline-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+
+  background: #2A3440;
+  border: 1px solid #8A97A6;
+  border-radius: 6px;
+
+  cursor: ew-resize;
+  touch-action: none;
+  z-index: 2;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.chart-timeline-handle::before {
+  content: "";
+  display: block;
+  width: 10px;
+  height: 22px;
+  background-image:
+    linear-gradient(
+      to right,
+      #8A97A6 0,
+      #8A97A6 1px,
+      transparent 1px,
+      transparent 4px
+    );
+  background-size: 4px 100%;
+  border-radius: 1px;
+}
+
+.chart-timeline-handle[data-role="start"] {
+  left: -1px;
+}
+
+.chart-timeline-handle[data-role="end"] {
+  right: -1px;
+}
+
+.chart-timeline-handle:hover,
+.chart-timeline-window.is-dragging .chart-timeline-handle {
+  background: #34404E;
+  border-color: #A9B5C2;
+}
+
+/* На тач-экранах ручки ещё толще */
+@media (pointer: coarse) {
+  .chart-timeline-track {
+    height: 54px;
+  }
+
+  .chart-timeline-handle {
+    width: 34px;
+  }
+
+  .chart-timeline-handle::before {
+    width: 12px;
+    height: 26px;
+  }
+}
+
+/* ============================================================
    Seasonality chart
    ============================================================ */
 .seasonality-chart-section {
@@ -382,6 +515,16 @@ input[type="checkbox"]:focus-visible {
 .seasonality-chart {
   width: 100%;
   height: 520px;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  outline: none;
+}
+
+.seasonality-chart svg,
+.seasonality-chart canvas {
+  -webkit-tap-highlight-color: transparent;
+  outline: none;
 }
 
 .seasonality-controls {
@@ -419,7 +562,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 /* ============================================================
-   ECharts tooltip (built via HTML inside formatter)
+   ECharts tooltip
    ============================================================ */
 .tt-header {
   margin-bottom: 6px;
@@ -491,12 +634,10 @@ input[type="checkbox"]:focus-visible {
   transition: color 0.15s ease, font-weight 0.15s ease;
 }
 
-/* Приглушение остальных строк при наличии активной строки */
 .tt-list.has-active .tt-row:not(.is-active) {
   opacity: 0.38;
 }
 
-/* Подсветка активной строки: жирный белый текст, плашка с полоской в цвет линии */
 .tt-row.is-active {
   opacity: 1 !important;
   background: rgba(255, 255, 255, 0.09);
@@ -654,6 +795,15 @@ input[type="checkbox"]:focus-visible {
     flex: 1;
     text-align: center;
   }
+
+  /* На тач-экране ручки становятся шире */
+  .chart-timeline-track {
+    height: 56px;
+  }
+
+  .chart-timeline-handle {
+    width: 38px;
+  }
 }
 
 /* ============================================================
@@ -686,7 +836,6 @@ input[type="checkbox"]:focus-visible {
   justify-content: start;
 }
 
-/* Годы должны начинаться сразу после графика, без лишнего межблочного зазора. */
 .seasonality-years-controls {
   margin-top: -20px;
 }
@@ -725,16 +874,9 @@ input[type="checkbox"]:focus-visible {
 }
 
 /* ============================================================
-   Mobile: reserve space for the Deep Link button in the
-   currency row so it never overlaps the USD segment.
+   Mobile: reserve space for the Deep Link button
    ============================================================ */
 @media (max-width: 520px) {
-  /*
-   * На мобильном оба переключателя должны иметь одинаковую
-   * геометрию. Резервируем справа место под Copy, а ширину
-   * подписей фиксируем, чтобы BYN/USD и два режима получили
-   * одинаковую ширину кнопок.
-   */
   .chart-section .toolbar-group {
     flex: 0 0 calc(100% - 42px);
     width: calc(100% - 42px);
