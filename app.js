@@ -1796,61 +1796,23 @@ function seasonalityPercentToIndex(percent) {
 function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
-  const start = seasonalityIndexToPercent(state.seasonalityMonthStart);
-  const end = seasonalityIndexToPercent(state.seasonalityMonthEnd);
-
-  /* Тот же таймлайн, что и под основным графиком (геометрия DefiLlama). */
+  /*
+   * Самый простой слайдер: без inside-зума, без кастомных стилей.
+   * Границы задаём индексами месяцев (startValue / endValue), а не
+   * процентами, чтобы не было дрейфа из-за округления.
+   * Размеры — как у слайдера под основным графиком.
+   */
   return [
-    {
-      type: "inside",
-      xAxisIndex: 0,
-      start,
-      end,
-    },
     {
       type: "slider",
       xAxisIndex: 0,
-      start,
-      end,
-
-      /* Выделение нового диапазона протяжкой по слайдеру отключено. */
+      startValue: state.seasonalityMonthStart,
+      endValue: state.seasonalityMonthEnd,
       brushSelect: false,
-
       left: 8,
       right: 14,
       bottom: 19,
       height: 30,
-
-      borderColor: "#232B36",
-      backgroundColor: "transparent",
-      fillerColor: "rgba(61,220,132,0.10)",
-
-      handleStyle: {
-        color: "#1A222B",
-        borderColor: "#5B6673",
-      },
-      moveHandleStyle: {
-        color: "#2A3440",
-      },
-      selectedDataBackground: {
-        lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
-        areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
-      },
-      emphasis: {
-        handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
-        moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
-      },
-
-      textStyle: {
-        color: "#5B6673",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-      },
-
-      labelFormatter: (value, valueStr) => {
-        const month = MONTH_NAMES_RU[Math.round(value)];
-        return month ? month.slice(0, 3) : valueStr;
-      },
     },
   ];
 }
@@ -1865,15 +1827,13 @@ function wireSeasonalityDataZoom() {
 
     if (!zoom) return;
 
-    const startPercent = Number(zoom.start);
-    const endPercent = Number(zoom.end);
+    let start = Math.round(Number(zoom.startValue));
+    let end = Math.round(Number(zoom.endValue));
 
-    if (!Number.isFinite(startPercent) || !Number.isFinite(endPercent)) {
-      return;
-    }
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
-    let start = seasonalityPercentToIndex(startPercent);
-    let end = seasonalityPercentToIndex(endPercent);
+    start = Math.max(0, Math.min(SEASONALITY_MAX_INDEX, start));
+    end = Math.max(0, Math.min(SEASONALITY_MAX_INDEX, end));
 
     if (end < start) {
       [start, end] = [end, start];
@@ -3709,6 +3669,13 @@ async function init() {
         renderer: "svg",
       }
     );
+
+    /* Убираем синюю подсветку/выделение области графика при касании. */
+    [chartElement, seasonalityChartElement].forEach((element) => {
+      element.style.webkitTapHighlightColor = "transparent";
+      element.style.webkitUserSelect = "none";
+      element.style.userSelect = "none";
+    });
 
     /*
      * Панели показателей.
