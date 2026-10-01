@@ -1858,46 +1858,6 @@ let seasonalityPercentTimer = null;
 function wireSeasonalityDataZoom() {
   if (!seasonalityChart) return;
 
-  /*
-   * Блокируем захват самой полосы выделения (между ручками) и
-   * верхней «ручки переноса», чтобы окно нельзя было тащить целиком.
-   * Ручки границ остаются рабочими.
-   */
-  const element = document.getElementById("seasonalityChart");
-  const HANDLE_HALF_PX = 10;
-
-  const blockMove = (event) => {
-    const point = event.touches && event.touches[0]
-      ? event.touches[0]
-      : event;
-    const rect = element.getBoundingClientRect();
-    const x = point.clientX - rect.left;
-    const y = point.clientY - rect.top;
-
-    const height = seasonalityChart.getHeight();
-    const width = seasonalityChart.getWidth();
-
-    /* Слайдер: left 8, right 14, bottom 19, height 30. */
-    if (y < height - 49 - 6 || y > height - 19 + 2) return;
-
-    const trackLeft = 8;
-    const trackWidth = Math.max(1, width - 8 - 14);
-    const startX =
-      trackLeft + (state.seasonalityMonthStart / SEASONALITY_MAX_INDEX) * trackWidth;
-    const endX =
-      trackLeft + (state.seasonalityMonthEnd / SEASONALITY_MAX_INDEX) * trackWidth;
-
-    if (x > startX + HANDLE_HALF_PX && x < endX - HANDLE_HALF_PX) {
-      event.stopPropagation();
-    }
-  };
-
-  if (element) {
-    ["mousedown", "touchstart", "pointerdown"].forEach((name) => {
-      element.addEventListener(name, blockMove, true);
-    });
-  }
-
   seasonalityChart.on("dataZoom", () => {
     const option = seasonalityChart.getOption();
     const zoom = option && option.dataZoom && option.dataZoom[0];
@@ -1920,23 +1880,6 @@ function wireSeasonalityDataZoom() {
       start === state.seasonalityMonthStart &&
       end === state.seasonalityMonthEnd
     ) {
-      return;
-    }
-
-    /*
-     * Перетаскивание всего диапазона запрещено: двигать можно только
-     * границы. Если ширина окна не изменилась, а края сдвинулись —
-     * это перенос окна целиком, возвращаем прежние границы.
-     */
-    if (
-      end - start === state.seasonalityMonthEnd - state.seasonalityMonthStart
-    ) {
-      seasonalityChart.dispatchAction({
-        type: "dataZoom",
-        dataZoomIndex: 0,
-        startValue: state.seasonalityMonthStart,
-        endValue: state.seasonalityMonthEnd,
-      });
       return;
     }
 
