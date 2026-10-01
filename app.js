@@ -69,7 +69,8 @@ const X_YEAR_STEPS = [1, 2, 5, 10];
 const BASELINE_COLOR = "#9EA0A5";
 
 /* Вертикальная сетка по годам. */
-const X_GRID_COLOR = "#232B36";
+const GRID_COLOR = "rgba(255,255,255,0.06)";
+const X_GRID_COLOR = GRID_COLOR;
 
 const GROUP_ORDER = [
   "Зарплаты",
@@ -1164,8 +1165,8 @@ function buildSeasonalityAverageHtml(monthName, validParams, meta) {
   if (percentMode) {
     valueText = formatPercentChange(average);
     const rounded = Math.round((average - 100) * 10) / 10;
-    if (rounded > 0) valueColor = "var(--c-rate)";
-    if (rounded < 0) valueColor = "var(--c-avg-minsk)";
+    if (rounded > 0) valueColor = "var(--up)";
+    if (rounded < 0) valueColor = "var(--down)";
   } else {
     valueText = formatValue(average, meta, false);
   }
@@ -1472,20 +1473,9 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = meta.key;
         state.seasonalityYears = new Set(getSeasonalityYears(meta));
         state.seasonalityYearsInitialized = true;
-
-        /*
-         * Диапазон месяцев: если выбрано меньше 8 месяцев — он
-         * сохраняется при смене показателя; если 8 и больше —
-         * сбрасывается на все 12.
-         */
-        const selectedMonths =
-          state.seasonalityMonthEnd - state.seasonalityMonthStart + 1;
-
-        if (selectedMonths >= 8) {
-          state.seasonalityMonthStart = 0;
-          state.seasonalityMonthEnd = 11;
-          state.seasonalityMonthRangeInitialized = false;
-        }
+        state.seasonalityMonthStart = 0;
+        state.seasonalityMonthEnd = 11;
+        state.seasonalityMonthRangeInitialized = false;
 
         container
           .querySelectorAll('input[type="checkbox"]')
@@ -1498,7 +1488,9 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = null;
         state.seasonalityYears = new Set();
         state.seasonalityYearsInitialized = false;
-        /* Диапазон месяцев при снятии галочки не трогаем. */
+        state.seasonalityMonthStart = 0;
+        state.seasonalityMonthEnd = 11;
+        state.seasonalityMonthRangeInitialized = false;
       }
 
       buildSeasonalityYearsPanel();
@@ -1636,13 +1628,13 @@ function buildSeasonalityYAxis(meta) {
     type: "value",
     position: "left",
     name: percentMode ? "%" : (isRateSeries(meta) ? "BYN/USD" : getDisplayUnit(meta)),
-    nameTextStyle: { color: "#5B6673" },
+    nameTextStyle: { color: "#878787" },
     axisLabel: {
-      color: "#8A97A6",
+      color: "#878787",
       formatter: (value) => formatValue(value, meta, percentMode),
     },
     axisLine: { show: false },
-    splitLine: { show: true, lineStyle: { color: "#161C24" } },
+    splitLine: { show: true, lineStyle: { color: GRID_COLOR } },
   };
 }
 
@@ -1752,17 +1744,17 @@ function buildSeasonalityOption() {
         type: "cross",
         label: { color: "#000" },
       },
-      backgroundColor: "#12181F",
-      borderColor: "#232B36",
+      backgroundColor: "#181a1b",
+      borderColor: "rgba(255,255,255,0.12)",
       borderWidth: 1,
       padding: 12,
       textStyle: {
-        color: "#E8ECF1",
+        color: "#ffffff",
         fontSize: 12,
       },
       extraCssText:
-        "border-radius:8px;" +
-        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
+        "border-radius:6px;" +
+        "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
         "pointer-events:none;",
       formatter: buildSeasonalityTooltipFormatter,
     },
@@ -1772,11 +1764,11 @@ function buildSeasonalityOption() {
       data: months,
       boundaryGap: false,
       axisLabel: {
-        color: "#8A97A6",
+        color: "#878787",
         margin: 12,
       },
       axisLine: {
-        lineStyle: { color: "#232B36" },
+        lineStyle: { color: "rgba(255,255,255,0.12)" },
       },
       axisTick: { show: false },
 
@@ -1797,8 +1789,8 @@ function buildSeasonalityOption() {
       ? buildSeasonalityYAxis(meta)
       : {
           type: "value",
-          axisLabel: { color: "#8A97A6" },
-          splitLine: { lineStyle: { color: "#161C24" } },
+          axisLabel: { color: "#878787" },
+          splitLine: { lineStyle: { color: GRID_COLOR } },
         },
 
     dataZoom: buildSeasonalityDataZoom(),
@@ -1888,27 +1880,7 @@ function buildSeasonalityDataZoom() {
       bottom: 19,
       height: 30,
 
-      borderColor: "#232B36",
-      backgroundColor: "transparent",
-      fillerColor: "rgba(61,220,132,0.10)",
-
-      handleStyle: {
-        color: "#1A222B",
-        borderColor: "#5B6673",
-      },
-      moveHandleStyle: {
-        color: "#2A3440",
-      },
-      emphasis: {
-        handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
-        moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
-      },
-
-      textStyle: {
-        color: "#5B6673",
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-      },
+      ...buildSliderStyle(false),
 
       labelFormatter: (value, valueStr) => {
         const month = getSeasonalityMonths()[Math.round(value)];
@@ -2235,6 +2207,7 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
 
         option.series.forEach((seriesItem, sIdx) => {
           if (!seriesItem || !Array.isArray(seriesItem.data)) return;
+          if (seriesItem.id === ZOOM_SHADOW_ID) return;
 
           const data = seriesItem.data;
           const len = data.length;
@@ -2493,6 +2466,12 @@ function buildSeries() {
     result[0].markLine = buildBaselineMarkLine();
   }
 
+  const shadow = buildZoomShadowSeries(result);
+
+  if (shadow) {
+    result.unshift(shadow);
+  }
+
   return result;
 }
 
@@ -2663,7 +2642,7 @@ function formatXAxisLabel(value) {
 
   /* Промежуточные подписи — только год. */
   if (layout.labels.has(index)) {
-    return value.slice(0, 4);
+    return `{y|${value.slice(0, 4)}}`;
   }
 
   return "";
@@ -2698,9 +2677,9 @@ function buildBaselineMarkLine() {
    ============================================================ */
 
 function buildYAxes() {
-  const textSecondary = "#8A97A6";
-  const textTertiary = "#5B6673";
-  const splitColor = "#161C24";
+  const textSecondary = "#878787";
+  const textTertiary = "#878787";
+  const splitColor = GRID_COLOR;
 
   /*
    * Процентный режим:
@@ -2923,8 +2902,8 @@ function buildTooltipFormatter(params) {
 function buildOption() {
   const months = DATA.months;
 
-  const textSecondary = "#8A97A6";
-  const textTertiary = "#5B6673";
+  const textSecondary = "#878787";
+  const textTertiary = "#878787";
 
   return {
     backgroundColor: "transparent",
@@ -2966,21 +2945,21 @@ function buildOption() {
         },
       },
 
-      backgroundColor: "#12181F",
+      backgroundColor: "#181a1b",
 
-      borderColor: "#232B36",
+      borderColor: "rgba(255,255,255,0.12)",
       borderWidth: 1,
 
       padding: 12,
 
       textStyle: {
-        color: "#E8ECF1",
+        color: "#ffffff",
         fontSize: 12,
       },
 
       extraCssText:
-        "border-radius:8px;" +
-        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
+        "border-radius:6px;" +
+        "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
         "pointer-events:none;",
 
       formatter: buildTooltipFormatter,
@@ -2999,6 +2978,7 @@ function buildOption() {
         margin: 12,
 
         hideOverlap: true,
+        rich: { y: { fontWeight: 700, color: "#c6c6c6" } },
 
         /*
          * Подписи задаём явно: первый и последний месяц диапазона
@@ -3017,7 +2997,7 @@ function buildOption() {
 
       axisLine: {
         lineStyle: {
-          color: "#232B36",
+          color: "rgba(255,255,255,0.12)",
         },
       },
 
@@ -3065,31 +3045,7 @@ function buildOption() {
         bottom: 19,
         height: 30,
 
-        borderColor: "#232B36",
-        backgroundColor: "transparent",
-        fillerColor: "rgba(61,220,132,0.10)",
-
-        handleStyle: {
-          color: "#1A222B",
-          borderColor: "#5B6673",
-        },
-        moveHandleStyle: {
-          color: "#2A3440",
-        },
-        selectedDataBackground: {
-          lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
-          areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
-        },
-        emphasis: {
-          handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
-          moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
-        },
-
-        textStyle: {
-          color: textTertiary,
-          fontFamily: "var(--font-mono)",
-          fontSize: 11,
-        },
+        ...buildSliderStyle(true),
 
         labelFormatter: (value, valueStr) => {
           const month = months[Math.round(value)];
@@ -3100,6 +3056,256 @@ function buildOption() {
 
     series: buildSeries(),
   };
+}
+
+
+/* ============================================================
+   Стиль слайдера (общий для обоих графиков)
+   ============================================================ */
+
+const SLIDER_HANDLE_ICON =
+  "path://M-2,-10h4a3,3 0 0 1 3,3v14a3,3 0 0 1 -3,3h-4a3,3 0 0 1 -3,-3v-14a3,3 0 0 1 3,-3z";
+
+function buildSliderStyle(withShadow) {
+  return {
+    showDataShadow: withShadow,
+
+    borderColor: "rgba(255,255,255,0.4)",
+    backgroundColor: "transparent",
+    fillerColor: "rgba(0,0,0,0.1)",
+
+    handleIcon: SLIDER_HANDLE_ICON,
+    handleSize: "125%",
+    handleStyle: {
+      color: "rgba(0,0,0,0.4)",
+      borderColor: "rgba(255,255,255,0.9)",
+      borderWidth: 1.5,
+    },
+
+    /* «Гриппер» над выделенным окном. */
+    moveHandleSize: 8,
+    moveHandleStyle: {
+      color: "#5b5f63",
+      borderColor: "transparent",
+    },
+
+    dataBackground: {
+      lineStyle: { color: "rgba(255,255,255,0.35)", width: 1 },
+      areaStyle: { color: "rgba(255,255,255,0.08)" },
+    },
+    selectedDataBackground: {
+      lineStyle: { color: "rgba(255,255,255,0.75)", width: 1 },
+      areaStyle: { color: "rgba(255,255,255,0.18)" },
+    },
+
+    emphasis: {
+      handleStyle: { borderColor: "#ffffff", color: "rgba(255,255,255,0.2)" },
+      moveHandleStyle: { color: "#7d8185" },
+    },
+
+    textStyle: {
+      color: "#878787",
+      fontFamily: "var(--font-mono)",
+      fontSize: 11,
+    },
+  };
+}
+
+
+/* ============================================================
+   Мини-график внутри слайдера основного графика
+   ============================================================
+   ECharts рисует мини-график по ПЕРВОМУ ряду. Чтобы управлять тем,
+   какой ряд там виден, добавляем невидимый ряд-копию первым в список.
+   Он на той же оси Y, что и оригинал, поэтому масштаб осей не меняется.
+
+   Выбор: ряд с самой длинной историей среди выбранных.
+   Если выбрана средняя зарплата по Минску и она короче лидера не
+   более чем на 12 месяцев — берём её.
+   ============================================================ */
+
+const ZOOM_SHADOW_ID = "__zoom_shadow__";
+const ZOOM_SHADOW_PREFERRED_KEY = "средняя_средняя_минск";
+const ZOOM_SHADOW_TOLERANCE_MONTHS = 12;
+
+function buildZoomShadowSeries(seriesList) {
+  let best = null;
+  let preferred = null;
+
+  seriesList.forEach((item) => {
+    const data = item.data || [];
+    let first = -1;
+    let last = -1;
+
+    data.forEach((point, index) => {
+      if (point == null) return;
+      if (first < 0) first = index;
+      last = index;
+    });
+
+    if (first < 0) return;
+
+    const entry = { item, span: last - first };
+
+    if (!best || entry.span > best.span) best = entry;
+    if (item.id === ZOOM_SHADOW_PREFERRED_KEY) preferred = entry;
+  });
+
+  if (!best) return null;
+
+  const chosen =
+    preferred && preferred.span >= best.span - ZOOM_SHADOW_TOLERANCE_MONTHS
+      ? preferred
+      : best;
+
+  return {
+    id: ZOOM_SHADOW_ID,
+    type: "line",
+    data: chosen.item.data,
+    yAxisIndex: chosen.item.yAxisIndex,
+    connectNulls: true,
+    silent: true,
+    animation: false,
+    symbol: "none",
+    showSymbol: false,
+    lineStyle: { width: 0, opacity: 0 },
+    itemStyle: { opacity: 0 },
+    emphasis: { disabled: true },
+    tooltip: { show: false },
+    z: 0,
+  };
+}
+
+
+/* ============================================================
+   Легенда над графиком (HTML, некликабельная, с пагинацией)
+   ============================================================ */
+
+function legendTextColor(color) {
+  const hex = String(color).replace("#", "");
+
+  if (hex.length !== 6) return "#090b0c";
+
+  const r = parseInt(hex.slice(0, 2), 16);
+  const g = parseInt(hex.slice(2, 4), 16);
+  const b = parseInt(hex.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+
+  return luminance > 0.5 ? "#090b0c" : "#ffffff";
+}
+
+
+function renderPagedLegend(root, items) {
+  root.innerHTML = "";
+
+  if (!items.length) {
+    root.hidden = true;
+    return;
+  }
+
+  root.hidden = false;
+
+  const track = document.createElement("div");
+  track.className = "legend-items";
+
+  const chips = items.map((item) => {
+    const chip = document.createElement("span");
+    chip.className = "legend-chip";
+    chip.textContent = item.label;
+    chip.style.background = item.color;
+    chip.style.color = legendTextColor(item.color);
+    track.appendChild(chip);
+    return chip;
+  });
+
+  const pager = document.createElement("div");
+  pager.className = "legend-pager";
+  pager.innerHTML =
+    `<button type="button" class="legend-arrow" data-dir="-1" aria-label="Назад">` +
+    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4 6 12l10 8z"></path></svg></button>` +
+    `<span class="legend-page">1/1</span>` +
+    `<button type="button" class="legend-arrow" data-dir="1" aria-label="Вперёд">` +
+    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 10 8-10 8z"></path></svg></button>`;
+
+  root.appendChild(track);
+  root.appendChild(pager);
+
+  const gap = 8;
+  const rootWidth = root.clientWidth;
+  const widths = chips.map((chip) => chip.offsetWidth);
+  const total = widths.reduce((sum, w) => sum + w, 0) + gap * (widths.length - 1);
+
+  let pages = [];
+
+  if (total <= rootWidth) {
+    pages = [chips.map((_, i) => i)];
+    pager.hidden = true;
+  } else {
+    const available = Math.max(60, rootWidth - pager.offsetWidth - gap);
+    let current = [];
+    let used = 0;
+
+    widths.forEach((width, index) => {
+      const need = current.length ? width + gap : width;
+
+      if (current.length && used + need > available) {
+        pages.push(current);
+        current = [];
+        used = 0;
+      }
+
+      used += current.length ? width + gap : width;
+      current.push(index);
+    });
+
+    if (current.length) pages.push(current);
+  }
+
+  const pageLabel = pager.querySelector(".legend-page");
+  const prev = pager.querySelector('[data-dir="-1"]');
+  const next = pager.querySelector('[data-dir="1"]');
+
+  function show() {
+    root._legendPage = Math.max(0, Math.min(pages.length - 1, root._legendPage || 0));
+
+    const visible = new Set(pages[root._legendPage]);
+    chips.forEach((chip, index) => {
+      chip.hidden = !visible.has(index);
+    });
+
+    pageLabel.textContent = `${root._legendPage + 1}/${pages.length}`;
+    prev.disabled = root._legendPage === 0;
+    next.disabled = root._legendPage === pages.length - 1;
+  }
+
+  [prev, next].forEach((button) => {
+    button.addEventListener("click", () => {
+      root._legendPage = (root._legendPage || 0) + Number(button.dataset.dir);
+      show();
+    });
+  });
+
+  show();
+}
+
+
+function renderMainLegend() {
+  const root = document.getElementById("mainLegend");
+
+  if (!root || !DATA) {
+    return;
+  }
+
+  const metas = getSeriesMeta();
+
+  const items = metas
+    .filter((meta) => state.visible[meta.key])
+    .map((meta) => ({
+      label: getSeriesLabel(meta),
+      color: getSeriesColor(meta, metas.indexOf(meta)),
+    }));
+
+  renderPagedLegend(root, items);
 }
 
 
@@ -3124,6 +3330,8 @@ function render() {
     document.getElementById("chart"),
     state.hoveredMainSeriesId
   );
+
+  renderMainLegend();
 }
 
 
@@ -3976,6 +4184,7 @@ async function init() {
       () => {
         if (chart) {
           chart.resize();
+          renderMainLegend();
         }
 
         if (seasonalityChart) {
@@ -4034,7 +4243,7 @@ async function init() {
 
           <div style="
             margin-top:8px;
-            color:#8A97A6;
+            color:#878787;
             font-size:14px;
           ">
             ${String(error.message || error)}
@@ -4042,7 +4251,7 @@ async function init() {
 
           <div style="
             margin-top:12px;
-            color:#5B6673;
+            color:#878787;
             font-size:12px;
           ">
             Открой консоль браузера (F12 → Console),

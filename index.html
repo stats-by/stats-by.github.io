@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Зарплаты и жильё в Минске — дашборд</title>
 <meta name="description" content="Медианная и средняя зарплата, курс доллара и цена квадратного метра жилья в Минске с 2000 года.">
+<meta name="theme-color" content="#090b0c">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -12,37 +13,14 @@
 <div class="page">
 
   <header class="site-header">
-  <h1>Зарплаты и жильё в Минске</h1>
+    <h1>Зарплаты и жильё в Минске</h1>
   </header>
 
   <main class="dashboard">
 
     <section class="chart-section main-chart-section">
 
-      <button type="button" class="deep-link-button" id="shareMainChart" aria-label="Скопировать ссылку на первый график" title="Скопировать ссылку">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="9" y="9" width="11" height="11" rx="2"></rect>
-          <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
-        </svg>
-      </button>
-
-      <div class="toolbar">
-        <div class="toolbar-group">
-          <span class="toolbar-label">Валюта</span>
-          <div class="segmented" id="currencyToggle" role="group" aria-label="Валюта">
-            <button type="button" class="segmented-btn is-active" data-value="BYN">BYN</button>
-            <button type="button" class="segmented-btn" data-value="USD">USD</button>
-          </div>
-        </div>
-
-        <div class="toolbar-group">
-          <span class="toolbar-label">Вид</span>
-          <div class="segmented" id="modeToggle" role="group" aria-label="Вид значений">
-            <button type="button" class="segmented-btn is-active" data-value="absolute">Абсолютные</button>
-            <button type="button" class="segmented-btn" data-value="percent">В процентах</button>
-          </div>
-        </div>
-
+      <div class="chart-head">
         <div class="zoom-presets" id="zoomPresets" role="group" aria-label="Период графика">
           <button type="button" class="zoom-preset-btn" data-value="1y">Год</button>
           <button type="button" class="zoom-preset-btn" data-value="5y">5 лет</button>
@@ -50,7 +28,28 @@
           <button type="button" class="zoom-preset-btn" data-value="15y">15 лет</button>
           <button type="button" class="zoom-preset-btn" data-value="all">Всё время</button>
         </div>
+
+        <button type="button" class="deep-link-button" id="shareMainChart" aria-label="Скопировать ссылку на первый график" title="Скопировать ссылку">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+            <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
       </div>
+
+      <div class="toolbar">
+        <div class="segmented" id="modeToggle" role="group" aria-label="Вид значений">
+          <button type="button" class="segmented-btn is-active" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn" data-value="percent">В процентах</button>
+        </div>
+
+        <div class="segmented" id="currencyToggle" role="group" aria-label="Валюта">
+          <button type="button" class="segmented-btn is-active" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn" data-value="USD">USD</button>
+        </div>
+      </div>
+
+      <div class="legend" id="mainLegend" hidden></div>
 
       <div id="chart" class="chart" role="img" aria-label="График зарплат, курса доллара и цены жилья по месяцам"></div>
       <p class="hint" id="percentHint" hidden>За 100% принят левый край выбранного диапазона — сдвиньте ползунок, чтобы изменить точку отсчёта.</p>
@@ -66,32 +65,27 @@
     </details>
 
     <section class="chart-section seasonality-chart-section">
-      <button type="button" class="deep-link-button" id="shareSeasonalityChart" aria-label="Скопировать ссылку на график сезонности" title="Скопировать ссылку">
-        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-          <rect x="9" y="9" width="11" height="11" rx="2"></rect>
-          <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
-        </svg>
-      </button>
-      <div class="seasonality-header">
-        <h2>График сезонности</h2>
-        <p>Один показатель — отдельная кривая для каждого года.</p>
+
+      <div class="chart-head">
+        <h2 class="chart-title">График сезонности</h2>
+
+        <button type="button" class="deep-link-button" id="shareSeasonalityChart" aria-label="Скопировать ссылку на график сезонности" title="Скопировать ссылку">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+            <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
       </div>
 
       <div class="toolbar">
-        <div class="toolbar-group">
-          <span class="toolbar-label">Валюта</span>
-          <div class="segmented" id="seasonalityCurrencyToggle" role="group" aria-label="Валюта сезонности">
-            <button type="button" class="segmented-btn" data-value="BYN">BYN</button>
-            <button type="button" class="segmented-btn is-active" data-value="USD">USD</button>
-          </div>
+        <div class="segmented" id="seasonalityModeToggle" role="group" aria-label="Вид значений сезонности">
+          <button type="button" class="segmented-btn" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn is-active" data-value="percent">В процентах</button>
         </div>
 
-        <div class="toolbar-group">
-          <span class="toolbar-label">Вид</span>
-          <div class="segmented" id="seasonalityModeToggle" role="group" aria-label="Вид значений сезонности">
-            <button type="button" class="segmented-btn" data-value="absolute">Абсолютные</button>
-            <button type="button" class="segmented-btn is-active" data-value="percent">В процентах</button>
-          </div>
+        <div class="segmented" id="seasonalityCurrencyToggle" role="group" aria-label="Валюта сезонности">
+          <button type="button" class="segmented-btn" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn is-active" data-value="USD">USD</button>
         </div>
       </div>
 
