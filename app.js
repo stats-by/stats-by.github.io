@@ -1816,10 +1816,38 @@ function buildSeasonalityDataZoom() {
       /* График обновляется один раз, когда палец отпустил ручку. */
       realtime: false,
 
+      /* Геометрия и вид — как у слайдера основного графика. */
       left: 8,
       right: 14,
       bottom: 19,
       height: 30,
+
+      borderColor: "#232B36",
+      backgroundColor: "transparent",
+      fillerColor: "rgba(61,220,132,0.10)",
+
+      handleStyle: {
+        color: "#1A222B",
+        borderColor: "#5B6673",
+      },
+      moveHandleStyle: {
+        color: "#2A3440",
+      },
+      emphasis: {
+        handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+        moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
+      },
+
+      textStyle: {
+        color: "#5B6673",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+      },
+
+      labelFormatter: (value, valueStr) => {
+        const month = getSeasonalityMonths()[Math.round(value)];
+        return month || valueStr;
+      },
     },
   ];
 }
@@ -1829,6 +1857,46 @@ let seasonalityPercentTimer = null;
 
 function wireSeasonalityDataZoom() {
   if (!seasonalityChart) return;
+
+  /*
+   * Блокируем захват самой полосы выделения (между ручками) и
+   * верхней «ручки переноса», чтобы окно нельзя было тащить целиком.
+   * Ручки границ остаются рабочими.
+   */
+  const element = document.getElementById("seasonalityChart");
+  const HANDLE_HALF_PX = 10;
+
+  const blockMove = (event) => {
+    const point = event.touches && event.touches[0]
+      ? event.touches[0]
+      : event;
+    const rect = element.getBoundingClientRect();
+    const x = point.clientX - rect.left;
+    const y = point.clientY - rect.top;
+
+    const height = seasonalityChart.getHeight();
+    const width = seasonalityChart.getWidth();
+
+    /* Слайдер: left 8, right 14, bottom 19, height 30. */
+    if (y < height - 49 - 6 || y > height - 19 + 2) return;
+
+    const trackLeft = 8;
+    const trackWidth = Math.max(1, width - 8 - 14);
+    const startX =
+      trackLeft + (state.seasonalityMonthStart / SEASONALITY_MAX_INDEX) * trackWidth;
+    const endX =
+      trackLeft + (state.seasonalityMonthEnd / SEASONALITY_MAX_INDEX) * trackWidth;
+
+    if (x > startX + HANDLE_HALF_PX && x < endX - HANDLE_HALF_PX) {
+      event.stopPropagation();
+    }
+  };
+
+  if (element) {
+    ["mousedown", "touchstart", "pointerdown"].forEach((name) => {
+      element.addEventListener(name, blockMove, true);
+    });
+  }
 
   seasonalityChart.on("dataZoom", () => {
     const option = seasonalityChart.getOption();
@@ -1855,6 +1923,23 @@ function wireSeasonalityDataZoom() {
       return;
     }
 
+    /*
+     * Перетаскивание всего диапазона запрещено: двигать можно только
+     * границы. Если ширина окна не изменилась, а края сдвинулись —
+     * это перенос окна целиком, возвращаем прежние границы.
+     */
+    if (
+      end - start === state.seasonalityMonthEnd - state.seasonalityMonthStart
+    ) {
+      seasonalityChart.dispatchAction({
+        type: "dataZoom",
+        dataZoomIndex: 0,
+        startValue: state.seasonalityMonthStart,
+        endValue: state.seasonalityMonthEnd,
+      });
+      return;
+    }
+
     state.seasonalityMonthStart = start;
     state.seasonalityMonthEnd = end;
     state.seasonalityMonthRangeInitialized = true;
@@ -1867,7 +1952,7 @@ function wireSeasonalityDataZoom() {
         clearTimeout(seasonalityPercentTimer);
         seasonalityPercentTimer = setTimeout(() => {
           seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
-        }, 150);
+        }, 20);
       }
     }
   });
@@ -3538,7 +3623,7 @@ function wireDataZoom() {
       clearTimeout(mainPercentTimer);
       mainPercentTimer = setTimeout(() => {
         chart.setOption({ series: buildSeries() });
-      }, 150);
+      }, 20);
     }
   });
 }
