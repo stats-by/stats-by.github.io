@@ -1809,6 +1809,13 @@ function buildSeasonalityDataZoom() {
       startValue: state.seasonalityMonthStart,
       endValue: state.seasonalityMonthEnd,
       brushSelect: false,
+
+      /* Без мини-графика внутри слайдера. */
+      showDataShadow: false,
+
+      /* График обновляется один раз, когда палец отпустил ручку. */
+      realtime: false,
+
       left: 8,
       right: 14,
       bottom: 19,
@@ -1817,6 +1824,8 @@ function buildSeasonalityDataZoom() {
   ];
 }
 
+
+let seasonalityPercentTimer = null;
 
 function wireSeasonalityDataZoom() {
   if (!seasonalityChart) return;
@@ -1855,7 +1864,10 @@ function wireSeasonalityDataZoom() {
       const meta = metaByKey(state.seasonalityKey);
 
       if (meta) {
-        seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
+        clearTimeout(seasonalityPercentTimer);
+        seasonalityPercentTimer = setTimeout(() => {
+          seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
+        }, 150);
       }
     }
   });
@@ -2913,6 +2925,9 @@ function buildOption() {
         /* Выделение нового диапазона протяжкой по слайдеру отключено. */
         brushSelect: false,
 
+        /* График обновляется один раз, когда палец отпустил ручку. */
+        realtime: false,
+
         /* Геометрия DefiLlama */
         left: 8,
         right: 14,
@@ -3490,6 +3505,8 @@ function resetZoom() {
    Обработка изменения dataZoom
    ============================================================ */
 
+let mainPercentTimer = null;
+
 function wireDataZoom() {
   chart.on("dataZoom", () => {
     const option = chart.getOption();
@@ -3518,7 +3535,10 @@ function wireDataZoom() {
      * прямо под пальцем.
      */
     if (state.mode === "percent") {
-      chart.setOption({ series: buildSeries() });
+      clearTimeout(mainPercentTimer);
+      mainPercentTimer = setTimeout(() => {
+        chart.setOption({ series: buildSeries() });
+      }, 150);
     }
   });
 }
