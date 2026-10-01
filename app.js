@@ -2891,75 +2891,54 @@ function buildOption() {
 
     dataZoom: [
       {
-        type: "slider",
-
+        type: "inside",
         xAxisIndex: 0,
-
+        start: state.zoomStart,
+        end: state.zoomEnd,
+      },
+      {
+        type: "slider",
+        xAxisIndex: 0,
         start: state.zoomStart,
         end: state.zoomEnd,
 
-        /* Отключаем выделение нового диапазона мышью (протяжкой ЛКМ). */
-        brushSelect: false,
-
-        height: 24,
-
-        bottom: 30,
+        /* Геометрия DefiLlama */
+        left: 8,
+        right: 14,
+        bottom: 19,
+        height: 30,
 
         borderColor: "#232B36",
-
-        backgroundColor: "#0A0E13",
-
+        backgroundColor: "transparent",
         fillerColor: "rgba(61,220,132,0.10)",
 
         handleStyle: {
           color: "#1A222B",
           borderColor: "#5B6673",
         },
-
         moveHandleStyle: {
           color: "#2A3440",
+        },
+        selectedDataBackground: {
+          lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
+          areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
+        },
+        emphasis: {
+          handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+          moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
         },
 
         textStyle: {
           color: textTertiary,
-
           fontFamily: "var(--font-mono)",
-
           fontSize: 11,
         },
 
         labelFormatter: (value, valueStr) => {
-          const index = Math.round(value);
-
-          const month = months[index];
-
+          const month = months[Math.round(value)];
           return month || valueStr;
         },
       },
-
-      /*
-       * "inside" (колесо / перетаскивание / pinch по самому графику)
-       * подключаем только на устройствах с мышью. На тач-экране
-       * управление диапазоном — только нижним ползунком.
-       */
-      ...(IS_TOUCH
-        ? []
-        : [
-            {
-              type: "inside",
-
-              xAxisIndex: 0,
-
-              start: state.zoomStart,
-              end: state.zoomEnd,
-
-              zoomOnMouseWheel: true,
-
-              moveOnMouseMove: true,
-
-              moveOnMouseWheel: true,
-            },
-          ]),
     ],
 
     series: buildSeries(),
@@ -3501,204 +3480,34 @@ function resetZoom() {
    ============================================================ */
 
 function wireDataZoom() {
-  /*
-   * ECharts не передаёт в событии dataZoom надёжный признак того,
-   * была ли граница изменена колесом или перетаскиванием ручки.
-   * Поэтому отдельно запоминаем нативное событие wheel.
-   * dataZoom от колеса приходит сразу после него.
-   */
-  if (chart && chart.getZr) {
-    chart.getZr().on("mousewheel", () => {
-      state.wheelZoomAt = Date.now();
-    });
-
-    chart.getZr().on("wheel", () => {
-      state.wheelZoomAt = Date.now();
-    });
-  }
-
-  chart.on("dataZoom", (params) => {
+  chart.on("dataZoom", () => {
     const option = chart.getOption();
+    const zoom = option && option.dataZoom && option.dataZoom[0];
 
-    if (
-      !option ||
-      !option.dataZoom ||
-      !option.dataZoom.length
-    ) {
-      return;
-    }
+    if (!zoom) return;
 
-    const slider = option.dataZoom[0];
+    let start = Number(zoom.start);
+    let end = Number(zoom.end);
 
-    let start = Number(slider.start);
-    let end = Number(slider.end);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
-    if (!Number.isFinite(start) || !Number.isFinite(end)) {
-      return;
-    }
+    if (end < start) [start, end] = [end, start];
 
-    start = Math.max(0, Math.min(100, start));
-    end = Math.max(0, Math.min(100, end));
-
-    if (end < start) {
-      [start, end] = [end, start];
-    }
-
-    /*
-     * Служебное второе событие после dispatchAction.
-     */
-    if (state.correctingZoom) {
-      state.correctingZoom = false;
-      state.zoomStart = start;
-      state.zoomEnd = end;
-      state.lastZoomStart = start;
-      state.lastZoomEnd = end;
-      state.zoomAnchorEnd = end;
-      updateZoomPresetButtons();
-      return;
-    }
-
-    const previousStart = state.lastZoomStart;
-    const previousEnd = state.lastZoomEnd;
-    const previousWidth = previousEnd - previousStart;
-    const currentWidth = end - start;
-
-    const startChanged =
-      Math.abs(start - previousStart) > 0.000001;
-    const endChanged =
-      Math.abs(end - previousEnd) > 0.000001;
-
-    /*
-     * Колесо определяем по отдельному событию ZRender.
-     * Небольшое окно нужно только для связывания wheel -> dataZoom.
-     */
-    const isWheelZoom =
-      Date.now() - state.wheelZoomAt < 100;
-
-    /*
-     * Любое ручное изменение отменяет подсветку пресета.
-     */
+    state.zoomStart = start;
+    state.zoomEnd = end;
+    state.lastZoomStart = start;
+    state.lastZoomEnd = end;
+    state.zoomAnchorEnd = end;
     state.zoomPreset = null;
     updateZoomPresetButtons();
 
     /*
-     * На тач-экране диапазон меняется только нижним ползунком
-     * (ручки или перетаскивание всего окна) — принимаем как есть.
+     * В процентном режиме 100% зависит от левой границы. Обновляем только
+     * серии (merge), а не весь график: полный render() пересоздаёт слайдер
+     * прямо под пальцем.
      */
-    if (IS_TOUCH) {
-      state.zoomStart = start;
-      state.zoomEnd = end;
-      state.lastZoomStart = start;
-      state.lastZoomEnd = end;
-      state.zoomAnchorEnd = end;
-      return;
-    }
-
-    /*
-     * Если это НЕ колесо, значит пользователь физически двигает
-     * ручку slider или весь выделенный диапазон. Такие изменения
-     * принимаем без коррекции.
-     *
-     * Это принципиально важно: правую ручку можно двигать ЛКМ,
-     * но zoom колесом при этом продолжает держать правый край.
-     */
-    if (!isWheelZoom && startChanged && !endChanged) {
-      state.zoomStart = start;
-      state.zoomEnd = previousEnd;
-      state.lastZoomStart = start;
-      state.lastZoomEnd = previousEnd;
-      state.zoomAnchorEnd = previousEnd;
-      return;
-    }
-
-    if (!isWheelZoom && !startChanged && endChanged) {
-      state.zoomStart = previousStart;
-      state.zoomEnd = end;
-      state.lastZoomStart = previousStart;
-      state.lastZoomEnd = end;
-      state.zoomAnchorEnd = end;
-      return;
-    }
-
-    /*
-     * Если обе границы изменились на одинаковую величину,
-     * это перемещение всего выделенного диапазона.
-     * Оставляем его как есть — это не изменение масштаба.
-     */
-    if (
-      !isWheelZoom &&
-      startChanged &&
-      endChanged &&
-      Math.abs(currentWidth - previousWidth) <= 0.000001
-    ) {
-      state.zoomStart = start;
-      state.zoomEnd = end;
-      state.lastZoomStart = start;
-      state.lastZoomEnd = end;
-      state.zoomAnchorEnd = end;
-      return;
-    }
-
-    /*
-     * Обе границы изменились и ширина изменилась — это zoom
-     * колесом мыши / gesture.
-     *
-     * Zoom in:
-     *   правая граница фиксирована;
-     *   двигается только левая.
-     *
-     * Zoom out:
-     *   сначала двигается левая граница влево;
-     *   после достижения 0% начинает двигаться правая.
-     */
-    let correctedStart;
-    let correctedEnd;
-
-    if (currentWidth < previousWidth - 0.000001) {
-      correctedEnd = previousEnd;
-      correctedStart = correctedEnd - currentWidth;
-    } else if (currentWidth > previousWidth + 0.000001) {
-      correctedEnd = previousEnd;
-      correctedStart = correctedEnd - currentWidth;
-
-      if (correctedStart < 0) {
-        correctedStart = 0;
-        correctedEnd = currentWidth;
-      }
-    } else {
-      correctedStart = previousStart;
-      correctedEnd = previousEnd;
-    }
-
-    correctedStart = Math.max(0, Math.min(100, correctedStart));
-    correctedEnd = Math.max(
-      correctedStart,
-      Math.min(100, correctedEnd)
-    );
-
-    const changed =
-      Math.abs(correctedStart - start) > 0.000001 ||
-      Math.abs(correctedEnd - end) > 0.000001;
-
-    state.zoomStart = correctedStart;
-    state.zoomEnd = correctedEnd;
-    state.lastZoomStart = correctedStart;
-    state.lastZoomEnd = correctedEnd;
-    state.zoomAnchorEnd = correctedEnd;
-
-    if (changed) {
-      state.correctingZoom = true;
-
-      chart.dispatchAction({
-        type: "dataZoom",
-        dataZoomIndex: IS_TOUCH ? [0] : [0, 1],
-        start: correctedStart,
-        end: correctedEnd,
-      });
-    }
-
     if (state.mode === "percent") {
-      render();
+      chart.setOption({ series: buildSeries() });
     }
   });
 }
