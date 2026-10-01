@@ -1121,6 +1121,65 @@ function formatValue(value, meta, percentMode = false) {
 }
 
 
+/*
+ * Изменение относительно базы (100%) для тултипов: 101,4% -> +1,4%.
+ * Оси графиков продолжают показывать уровень (100%, 120%...).
+ */
+function formatPercentChange(value) {
+  if (value == null || !Number.isFinite(Number(value))) {
+    return "—";
+  }
+
+  const change = Math.round((Number(value) - 100) * 10) / 10;
+  const text = Math.abs(change).toLocaleString("ru-RU", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  });
+
+  if (change > 0) return `+${text}%`;
+  if (change < 0) return `\u2212${text}%`;
+  return `${text}%`;
+}
+
+
+/*
+ * HTML заголовка тултипа сезонности: «Октябрь среднее: +1,4%».
+ */
+function buildSeasonalityAverageHtml(monthName, validParams, meta) {
+  const values = validParams.map((param) =>
+    Number(
+      param.value && typeof param.value === "object"
+        ? param.value.value
+        : param.value
+    )
+  );
+
+  const average =
+    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const percentMode = state.seasonalityMode === "percent";
+
+  let valueText;
+  let valueColor = "var(--text-primary)";
+
+  if (percentMode) {
+    valueText = formatPercentChange(average);
+    const rounded = Math.round((average - 100) * 10) / 10;
+    if (rounded > 0) valueColor = "var(--c-rate)";
+    if (rounded < 0) valueColor = "var(--c-avg-minsk)";
+  } else {
+    valueText = formatValue(average, meta, false);
+  }
+
+  return `
+    <div class="tt-header">
+      <span class="tt-date">${monthName}</span>
+      <span class="tt-avg-label">среднее:</span>
+      <span class="tt-avg-val" style="color:${valueColor};">${valueText}</span>
+    </div>
+  `;
+}
+
+
 /* ============================================================
    Отображаемое название ряда
    ============================================================ */
@@ -1601,10 +1660,11 @@ function buildSeasonalityTooltipFormatter(params) {
     )
   );
 
+  const monthIndex = params[0].dataIndex;
+  const monthName = MONTH_NAMES_RU[monthIndex] || params[0].axisValue;
+
   let html = `
-    <div class="tt-header">
-      <div class="tt-date">${params[0].axisValue}</div>
-    </div>
+    ${buildSeasonalityAverageHtml(monthName, validParams, meta)}
     <div class="tt-list ${hasActive ? "has-active" : ""}">
   `;
 
@@ -1624,11 +1684,9 @@ function buildSeasonalityTooltipFormatter(params) {
     );
 
     const color = param.color || "#3DDC84";
-    const valueText = formatValue(
-      value,
-      meta,
-      state.seasonalityMode === "percent"
-    );
+    const valueText = state.seasonalityMode === "percent"
+      ? formatPercentChange(value)
+      : formatValue(value, meta, false);
 
     html += `
       <div class="tt-row ${isActive ? "is-active" : ""}"
@@ -2836,11 +2894,9 @@ function buildTooltipFormatter(params) {
       param.color ||
       getSeriesColor(meta, getStableSeriesIndex(meta));
 
-    const valueText = formatValue(
-      rawValue,
-      meta,
-      state.mode === "percent"
-    );
+    const valueText = state.mode === "percent"
+      ? formatPercentChange(rawValue)
+      : formatValue(rawValue, meta, false);
 
     const isActive = Boolean(
       activeId &&

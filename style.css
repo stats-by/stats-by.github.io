@@ -422,7 +422,23 @@ input[type="checkbox"]:focus-visible {
    ECharts tooltip (built via HTML inside formatter)
    ============================================================ */
 .tt-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin-bottom: 6px;
+}
+
+.tt-avg-label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.tt-avg-val {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.2;
 }
 
 .tt-date {
