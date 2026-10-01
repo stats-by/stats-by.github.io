@@ -1722,7 +1722,7 @@ function buildSeasonalityOption() {
     grid: {
       left: state.seasonalityMode === "percent" ? 34 : 38,
       right: state.seasonalityMode === "percent" ? 34 : 38,
-      top: meta ? 38 : 20,
+      top: meta ? 30 : 20,
       bottom: 84,
       containLabel: false,
     },
@@ -1791,20 +1791,6 @@ function buildSeasonalityOption() {
           axisLabel: { color: "#8A97A6" },
           splitLine: { lineStyle: { color: "#161C24" } },
         },
-
-    legend: {
-      show: !!meta,
-      type: "scroll",
-      top: 0,
-      left: 0,
-      right: 0,
-      itemWidth: 18,
-      itemHeight: 2,
-      textStyle: {
-        color: "#8A97A6",
-        fontSize: 11,
-      },
-    },
 
     dataZoom: buildSeasonalityDataZoom(),
 
