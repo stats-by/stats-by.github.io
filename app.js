@@ -1771,7 +1771,7 @@ function buildSeasonalityOption() {
     },
 
     grid: {
-      left: 34,
+      left: state.seasonalityMode === "percent" ? 31 : 27,
       right: 8,
       top: 16,
       bottom: 84,
@@ -2546,11 +2546,11 @@ function getMonthIndex(month) {
 
 /* Отступ сетки слева/справа (одинаков для обеих сторон). */
 function getMainGridLeft() {
-  return 34;
+  return state.mode === "percent" ? 31 : 27;
 }
 
 function getMainGridRight() {
-  return state.mode === "percent" ? 4 : 28;
+  return state.mode === "percent" ? 4 : 22;
 }
 
 
