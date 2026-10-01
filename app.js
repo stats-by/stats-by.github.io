@@ -71,6 +71,35 @@ const BASELINE_COLOR = "#9EA0A5";
 /* Вертикальная сетка по годам. */
 const X_GRID_COLOR = "#232B36";
 
+/* Оформление нижнего ползунка — как у основного графика. */
+const SLIDER_STYLE = {
+  borderColor: "#232B36",
+  backgroundColor: "transparent",
+  fillerColor: "rgba(61,220,132,0.10)",
+
+  handleStyle: {
+    color: "#1A222B",
+    borderColor: "#5B6673",
+  },
+  moveHandleStyle: {
+    color: "#2A3440",
+  },
+  selectedDataBackground: {
+    lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
+    areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
+  },
+  emphasis: {
+    handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+    moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
+  },
+
+  textStyle: {
+    color: "#5B6673",
+    fontFamily: "var(--font-mono)",
+    fontSize: 11,
+  },
+};
+
 const GROUP_ORDER = [
   "Зарплаты",
   "Курс",
@@ -1739,6 +1768,8 @@ function buildSeasonalityOption() {
 
     dataZoom: buildSeasonalityDataZoom(),
 
+    graphic: buildSeasonalityLabelGraphic(),
+
     series: meta ? getSeasonalitySeries(meta) : [],
   };
 }
@@ -1797,10 +1828,11 @@ function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
   /*
-   * Самый простой слайдер: без inside-зума, без кастомных стилей.
+   * Оформление и геометрия — как у слайдера основного графика.
    * Границы задаём индексами месяцев (startValue / endValue), а не
    * процентами, чтобы не было дрейфа из-за округления.
-   * Размеры — как у слайдера под основным графиком.
+   * Подписи у ручек рисуем сами (см. buildSeasonalityLabelGraphic),
+   * поэтому встроенные отключены.
    */
   return [
     {
@@ -1810,18 +1842,96 @@ function buildSeasonalityDataZoom() {
       endValue: state.seasonalityMonthEnd,
       brushSelect: false,
 
-      /* Без мини-графика внутри слайдера. */
-      showDataShadow: false,
-
       /* График обновляется один раз, когда палец отпустил ручку. */
       realtime: false,
+
+      showDetail: false,
 
       left: 8,
       right: 14,
       bottom: 19,
       height: 30,
+
+      ...SLIDER_STYLE,
     },
   ];
+}
+
+
+/*
+ * Подписи границ слайдера сезонности.
+ *
+ *   левая граница на январе   — подписи нет;
+ *   правая граница на декабре — подписи нет;
+ *   левая на феврале          — подпись внутри (справа от ручки);
+ *   правая на ноябре          — подпись внутри (слева от ручки);
+ *   иначе                     — подпись снаружи от выделенного диапазона.
+ */
+function buildSeasonalityLabelGraphic() {
+  const hasMeta = !!metaByKey(state.seasonalityKey);
+  const width = seasonalityChart ? seasonalityChart.getWidth() : 0;
+  const height = seasonalityChart ? seasonalityChart.getHeight() : 0;
+  const names = getSeasonalityMonths();
+
+  const trackWidth = Math.max(0, width - 8 - 14);
+  const xOf = (index) => 8 + (index / SEASONALITY_MAX_INDEX) * trackWidth;
+  const y = height - 19 - 15;
+  const gap = 10;
+
+  const start = state.seasonalityMonthStart;
+  const end = state.seasonalityMonthEnd;
+
+  const font = '11px ui-monospace, "SFMono-Regular", Consolas, monospace';
+
+  const startShown = hasMeta && start > 0;
+  const endShown = hasMeta && end < SEASONALITY_MAX_INDEX;
+
+  const startInside = start === 1;
+  const endInside = end === SEASONALITY_MAX_INDEX - 1;
+
+  return {
+    elements: [
+      {
+        id: "seasonalityLabelStart",
+        type: "text",
+        silent: true,
+        z: 100,
+        invisible: !startShown,
+        x: startInside ? xOf(start) + gap : xOf(start) - gap,
+        y,
+        style: {
+          text: names[start] || "",
+          fill: "#5B6673",
+          font,
+          textAlign: startInside ? "left" : "right",
+          textVerticalAlign: "middle",
+        },
+      },
+      {
+        id: "seasonalityLabelEnd",
+        type: "text",
+        silent: true,
+        z: 100,
+        invisible: !endShown,
+        x: endInside ? xOf(end) - gap : xOf(end) + gap,
+        y,
+        style: {
+          text: names[end] || "",
+          fill: "#5B6673",
+          font,
+          textAlign: endInside ? "right" : "left",
+          textVerticalAlign: "middle",
+        },
+      },
+    ],
+  };
+}
+
+
+function updateSeasonalityLabels() {
+  if (!seasonalityChart) return;
+
+  seasonalityChart.setOption({ graphic: buildSeasonalityLabelGraphic() });
 }
 
 
@@ -1859,6 +1969,8 @@ function wireSeasonalityDataZoom() {
     state.seasonalityMonthEnd = end;
     state.seasonalityMonthRangeInitialized = true;
 
+    updateSeasonalityLabels();
+
     /* В процентном режиме пересчитываем базу 100% от левого края. */
     if (state.seasonalityMode === "percent") {
       const meta = metaByKey(state.seasonalityKey);
@@ -1867,7 +1979,7 @@ function wireSeasonalityDataZoom() {
         clearTimeout(seasonalityPercentTimer);
         seasonalityPercentTimer = setTimeout(() => {
           seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
-        }, 150);
+        }, 20);
       }
     }
   });
@@ -3538,7 +3650,7 @@ function wireDataZoom() {
       clearTimeout(mainPercentTimer);
       mainPercentTimer = setTimeout(() => {
         chart.setOption({ series: buildSeries() });
-      }, 150);
+      }, 20);
     }
   });
 }
@@ -3849,6 +3961,7 @@ async function init() {
 
         if (seasonalityChart) {
           seasonalityChart.resize();
+          updateSeasonalityLabels();
         }
       }
     );
