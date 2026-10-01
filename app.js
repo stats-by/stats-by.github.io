@@ -60,9 +60,13 @@ const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
  * Ширины — оценка в пикселях для шрифта 12px: нужны только для того,
  * чтобы решить, какие годы между крайними подписями поместятся.
  */
-const X_EDGE_LABEL_PX = 56;   /* «сен 2026» */
-const X_YEAR_LABEL_PX = 32;   /* «2021» */
-const X_LABEL_GAP_PX = 12;    /* минимальный зазор между подписями */
+const X_EDGE_LABEL_PX = 38;   /* «сен 2026» */
+const X_YEAR_LABEL_PX = 24;   /* «2021» */
+const X_LABEL_GAP_PX = 10;    /* минимальный зазор между подписями */
+
+/* Размеры шрифтов подписей осей. */
+const X_LABEL_FONT_PX = 8;    /* годы / месяцы под графиком */
+const AXIS_FONT_PX = 8.5;     /* шкалы слева и справа */
 const X_YEAR_STEPS = [1, 2, 5, 10];
 
 /* Пунктир «100%» — общий для основного графика и сезонности. */
@@ -71,6 +75,10 @@ const BASELINE_COLOR = "#9EA0A5";
 /* Вертикальная сетка по годам. */
 const GRID_COLOR = "rgba(255,255,255,0.06)";
 const X_GRID_COLOR = GRID_COLOR;
+
+/* Сетка на слайдере сезонности: ярче и чуть толще обычной. */
+const SLIDER_GRID_COLOR = "rgba(255,255,255,0.28)";
+const SLIDER_GRID_WIDTH = 1.5;
 
 const GROUP_ORDER = [
   "Зарплаты",
@@ -1621,17 +1629,59 @@ function getSeasonalitySeries(meta) {
 }
 
 
+/*
+ * Подпись деления шкалы. Число знаков после запятой одинаково у всех
+ * делений оси (3,5 / 3,0 / 2,5), без разделителя тысяч (5000).
+ */
+function countDecimals(value) {
+  const text = String(Number(Number(value).toFixed(6)));
+  const dot = text.indexOf(".");
+
+  return dot < 0 ? 0 : text.length - dot - 1;
+}
+
+
+function formatAxisTick(chartInstance, axisIndex, value, suffix = "") {
+  let decimals = countDecimals(value);
+
+  try {
+    const model = chartInstance && chartInstance.getModel();
+    const component = model && model.getComponent("yAxis", axisIndex);
+    const ticks = component && component.axis && component.axis.scale.getTicks();
+
+    if (Array.isArray(ticks) && ticks.length) {
+      decimals = Math.max(
+        ...ticks.map((tick) =>
+          countDecimals(tick && typeof tick === "object" ? tick.value : tick)
+        )
+      );
+    }
+  } catch (error) {
+    /* оставляем число знаков по самому значению */
+  }
+
+  decimals = Math.min(decimals, 3);
+
+  return Number(value).toLocaleString("ru-RU", {
+    useGrouping: false,
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }) + suffix;
+}
+
+
 function buildSeasonalityYAxis(meta) {
   const percentMode = state.seasonalityMode === "percent";
 
   return {
     type: "value",
     position: "left",
-    name: percentMode ? "%" : (isRateSeries(meta) ? "BYN/USD" : getDisplayUnit(meta)),
-    nameTextStyle: { color: "#878787" },
     axisLabel: {
       color: "#878787",
-      formatter: (value) => formatValue(value, meta, percentMode),
+      fontSize: AXIS_FONT_PX,
+      margin: 4,
+      formatter: (value) =>
+        formatAxisTick(seasonalityChart, 0, value, percentMode ? "%" : ""),
     },
     axisLine: { show: false },
     splitLine: { show: true, lineStyle: { color: GRID_COLOR } },
@@ -1721,9 +1771,9 @@ function buildSeasonalityOption() {
     },
 
     grid: {
-      left: state.seasonalityMode === "percent" ? 34 : 38,
-      right: state.seasonalityMode === "percent" ? 34 : 38,
-      top: meta ? 30 : 20,
+      left: 30,
+      right: 14,
+      top: 16,
       bottom: 84,
       containLabel: false,
     },
@@ -1765,7 +1815,8 @@ function buildSeasonalityOption() {
       boundaryGap: false,
       axisLabel: {
         color: "#878787",
-        margin: 12,
+        fontSize: X_LABEL_FONT_PX,
+        margin: 8,
       },
       axisLine: {
         lineStyle: { color: "rgba(255,255,255,0.12)" },
@@ -1922,7 +1973,7 @@ function buildSeasonalitySliderGrid() {
       silent: true,
       z: 1,
       shape: { x1: x, y1, x2: x, y2 },
-      style: { stroke: X_GRID_COLOR, lineWidth: 1 },
+      style: { stroke: SLIDER_GRID_COLOR, lineWidth: SLIDER_GRID_WIDTH },
     });
   }
 
@@ -2494,8 +2545,12 @@ function getMonthIndex(month) {
 
 
 /* Отступ сетки слева/справа (одинаков для обеих сторон). */
-function getMainGridSide() {
-  return state.mode === "percent" ? 34 : 38;
+function getMainGridLeft() {
+  return 32;
+}
+
+function getMainGridRight() {
+  return state.mode === "percent" ? 12 : 26;
 }
 
 
@@ -2563,7 +2618,7 @@ let xTickLayoutCache = null;
 function getXTickLayout() {
   const [start, end] = getLiveXWindow();
   const width = chart ? chart.getWidth() : 0;
-  const key = `${start}|${end}|${width}|${getMainGridSide()}`;
+  const key = `${start}|${end}|${width}|${getMainGridLeft()}|${getMainGridRight()}`;
 
   if (xTickLayoutCache && xTickLayoutCache.key === key) {
     return xTickLayoutCache;
@@ -2572,7 +2627,7 @@ function getXTickLayout() {
   const months = DATA.months;
   const gridWidth = Math.max(
     120,
-    (width || 800) - 2 * getMainGridSide()
+    (width || 800) - getMainGridLeft() - getMainGridRight()
   );
   const pxPerMonth = gridWidth / Math.max(1, end - start);
 
@@ -2677,42 +2732,38 @@ function buildBaselineMarkLine() {
    ============================================================ */
 
 function buildYAxes() {
-  const textSecondary = "#878787";
-  const textTertiary = "#878787";
-  const splitColor = GRID_COLOR;
+  const color = "#878787";
+  const left = getMainGridLeft();
+  const right = getMainGridRight();
+
+  const splitLine = {
+    show: true,
+    lineStyle: { color: GRID_COLOR },
+  };
 
   /*
-   * Процентный режим:
-   * одна ось.
+   * Процентный режим: одна ось.
    */
   if (state.mode === "percent") {
     return [
       {
         type: "value",
         position: "left",
-
         name: "%",
-
         nameTextStyle: {
-          color: textTertiary,
+          color,
+          fontSize: AXIS_FONT_PX,
+          align: "left",
+          padding: [0, 0, 0, -left + 2],
         },
-
         axisLabel: {
-          color: textSecondary,
-          formatter: (value) => `${value}%`,
+          color,
+          fontSize: AXIS_FONT_PX,
+          margin: 4,
+          formatter: (value) => formatAxisTick(chart, 0, value, "%"),
         },
-
-        splitLine: {
-          show: true,
-
-          lineStyle: {
-            color: splitColor,
-          },
-        },
-
-        axisLine: {
-          show: false,
-        },
+        splitLine,
+        axisLine: { show: false },
       },
     ];
   }
@@ -2723,85 +2774,58 @@ function buildYAxes() {
   return [
     {
       type: "value",
-
       position: "left",
-
       name: `Деньги, ${state.currency}`,
-
       nameTextStyle: {
-        color: textTertiary,
+        color,
+        fontSize: AXIS_FONT_PX,
+        align: "left",
+        padding: [0, 0, 0, -left + 2],
       },
-
       axisLabel: {
-        color: textSecondary,
-
-        formatter: (value) => {
-          return Number(value).toLocaleString("ru-RU");
-        },
+        color,
+        fontSize: AXIS_FONT_PX,
+        margin: 4,
+        formatter: (value) => formatAxisTick(chart, 0, value),
       },
 
       /* Подпись под курсором: целое число */
       axisPointer: {
         label: {
-          formatter: (params) => {
-            return String(Math.round(Number(params.value)));
-          },
+          formatter: (params) => String(Math.round(Number(params.value))),
         },
       },
 
-      splitLine: {
-        show: true,
-
-        lineStyle: {
-          color: splitColor,
-        },
-      },
-
-      axisLine: {
-        show: false,
-      },
+      splitLine,
+      axisLine: { show: false },
     },
 
     {
       type: "value",
-
       position: "right",
-
       name: "Ставки / курс",
-
       nameTextStyle: {
-        color: textTertiary,
+        color,
+        fontSize: AXIS_FONT_PX,
+        align: "right",
+        padding: [0, -right + 2, 0, 0],
       },
-
       axisLabel: {
-        color: textSecondary,
-
-        formatter: (value) => {
-          return Number(value).toLocaleString(
-            "ru-RU",
-            {
-              maximumFractionDigits: 2,
-            }
-          );
-        },
+        color,
+        fontSize: AXIS_FONT_PX,
+        margin: 4,
+        formatter: (value) => formatAxisTick(chart, 1, value),
       },
 
       /* Подпись под курсором: два знака после запятой */
       axisPointer: {
         label: {
-          formatter: (params) => {
-            return Number(params.value).toFixed(2);
-          },
+          formatter: (params) => Number(params.value).toFixed(2),
         },
       },
 
-      splitLine: {
-        show: false,
-      },
-
-      axisLine: {
-        show: false,
-      },
+      splitLine: { show: false },
+      axisLine: { show: false },
     },
   ];
 }
@@ -2915,8 +2939,8 @@ function buildOption() {
     },
 
     grid: {
-      left: getMainGridSide(),
-      right: getMainGridSide(),
+      left: getMainGridLeft(),
+      right: getMainGridRight(),
       top: 42,
       bottom: 84,
 
@@ -2974,11 +2998,18 @@ function buildOption() {
 
       axisLabel: {
         color: textSecondary,
+        fontSize: X_LABEL_FONT_PX,
 
-        margin: 12,
+        margin: 8,
 
         hideOverlap: true,
-        rich: { y: { fontWeight: 700, color: "#c6c6c6" } },
+        rich: {
+          y: {
+            fontWeight: 700,
+            fontSize: X_LABEL_FONT_PX,
+            color: "#c6c6c6",
+          },
+        },
 
         /*
          * Подписи задаём явно: первый и последний месяц диапазона
@@ -3178,138 +3209,6 @@ function buildZoomShadowSeries(seriesList) {
 
 
 /* ============================================================
-   Легенда над графиком (HTML, некликабельная, с пагинацией)
-   ============================================================ */
-
-function legendTextColor(color) {
-  const hex = String(color).replace("#", "");
-
-  if (hex.length !== 6) return "#090b0c";
-
-  const r = parseInt(hex.slice(0, 2), 16);
-  const g = parseInt(hex.slice(2, 4), 16);
-  const b = parseInt(hex.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-
-  return luminance > 0.5 ? "#090b0c" : "#ffffff";
-}
-
-
-function renderPagedLegend(root, items) {
-  root.innerHTML = "";
-
-  if (!items.length) {
-    root.hidden = true;
-    return;
-  }
-
-  root.hidden = false;
-
-  const track = document.createElement("div");
-  track.className = "legend-items";
-
-  const chips = items.map((item) => {
-    const chip = document.createElement("span");
-    chip.className = "legend-chip";
-    chip.textContent = item.label;
-    chip.style.background = item.color;
-    chip.style.color = legendTextColor(item.color);
-    track.appendChild(chip);
-    return chip;
-  });
-
-  const pager = document.createElement("div");
-  pager.className = "legend-pager";
-  pager.innerHTML =
-    `<button type="button" class="legend-arrow" data-dir="-1" aria-label="Назад">` +
-    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4 6 12l10 8z"></path></svg></button>` +
-    `<span class="legend-page">1/1</span>` +
-    `<button type="button" class="legend-arrow" data-dir="1" aria-label="Вперёд">` +
-    `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 4 10 8-10 8z"></path></svg></button>`;
-
-  root.appendChild(track);
-  root.appendChild(pager);
-
-  const gap = 8;
-  const rootWidth = root.clientWidth;
-  const widths = chips.map((chip) => chip.offsetWidth);
-  const total = widths.reduce((sum, w) => sum + w, 0) + gap * (widths.length - 1);
-
-  let pages = [];
-
-  if (total <= rootWidth) {
-    pages = [chips.map((_, i) => i)];
-    pager.hidden = true;
-  } else {
-    const available = Math.max(60, rootWidth - pager.offsetWidth - gap);
-    let current = [];
-    let used = 0;
-
-    widths.forEach((width, index) => {
-      const need = current.length ? width + gap : width;
-
-      if (current.length && used + need > available) {
-        pages.push(current);
-        current = [];
-        used = 0;
-      }
-
-      used += current.length ? width + gap : width;
-      current.push(index);
-    });
-
-    if (current.length) pages.push(current);
-  }
-
-  const pageLabel = pager.querySelector(".legend-page");
-  const prev = pager.querySelector('[data-dir="-1"]');
-  const next = pager.querySelector('[data-dir="1"]');
-
-  function show() {
-    root._legendPage = Math.max(0, Math.min(pages.length - 1, root._legendPage || 0));
-
-    const visible = new Set(pages[root._legendPage]);
-    chips.forEach((chip, index) => {
-      chip.hidden = !visible.has(index);
-    });
-
-    pageLabel.textContent = `${root._legendPage + 1}/${pages.length}`;
-    prev.disabled = root._legendPage === 0;
-    next.disabled = root._legendPage === pages.length - 1;
-  }
-
-  [prev, next].forEach((button) => {
-    button.addEventListener("click", () => {
-      root._legendPage = (root._legendPage || 0) + Number(button.dataset.dir);
-      show();
-    });
-  });
-
-  show();
-}
-
-
-function renderMainLegend() {
-  const root = document.getElementById("mainLegend");
-
-  if (!root || !DATA) {
-    return;
-  }
-
-  const metas = getSeriesMeta();
-
-  const items = metas
-    .filter((meta) => state.visible[meta.key])
-    .map((meta) => ({
-      label: getSeriesLabel(meta),
-      color: getSeriesColor(meta, metas.indexOf(meta)),
-    }));
-
-  renderPagedLegend(root, items);
-}
-
-
-/* ============================================================
    Рендер
    ============================================================ */
 
@@ -3330,8 +3229,6 @@ function render() {
     document.getElementById("chart"),
     state.hoveredMainSeriesId
   );
-
-  renderMainLegend();
 }
 
 
@@ -4184,7 +4081,6 @@ async function init() {
       () => {
         if (chart) {
           chart.resize();
-          renderMainLegend();
         }
 
         if (seasonalityChart) {
