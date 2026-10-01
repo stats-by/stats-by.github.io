@@ -1712,7 +1712,18 @@ function buildSeasonalityOption() {
         lineStyle: { color: "#232B36" },
       },
       axisTick: { show: false },
-      splitLine: { show: false },
+
+      /* Вертикальная сетка: одна линия на каждый месяц. */
+      splitLine: {
+        show: true,
+        showMinLine: false,
+        showMaxLine: false,
+        interval: 0,
+        lineStyle: {
+          color: X_GRID_COLOR,
+          width: 1,
+        },
+      },
     },
 
     yAxis: meta
@@ -1738,6 +1749,8 @@ function buildSeasonalityOption() {
     },
 
     dataZoom: buildSeasonalityDataZoom(),
+
+    graphic: buildSeasonalitySliderGrid(),
 
     series: meta ? getSeasonalitySeries(meta) : [],
   };
@@ -1850,6 +1863,45 @@ function buildSeasonalityDataZoom() {
       },
     },
   ];
+}
+
+
+/*
+ * Вертикальные линии по месяцам на таймлайне (слайдере) сезонности.
+ * У слайдера ECharts нет собственной сетки, поэтому рисуем линии
+ * элементами graphic по геометрии слайдера (left 8, right 14,
+ * bottom 19, height 30). 12 месяцев равномерно по ширине дорожки.
+ */
+const SEASONALITY_SLIDER = { left: 8, right: 14, bottom: 19, height: 30 };
+
+function buildSeasonalitySliderGrid() {
+  const width = seasonalityChart ? seasonalityChart.getWidth() : 0;
+  const height = seasonalityChart ? seasonalityChart.getHeight() : 0;
+
+  if (!width || !height) {
+    return [];
+  }
+
+  const track = width - SEASONALITY_SLIDER.left - SEASONALITY_SLIDER.right;
+  const y2 = height - SEASONALITY_SLIDER.bottom;
+  const y1 = y2 - SEASONALITY_SLIDER.height;
+  const elements = [];
+
+  /* Крайние линии совпадают с рамкой слайдера — их не рисуем. */
+  for (let i = 1; i < SEASONALITY_MAX_INDEX; i++) {
+    const x = SEASONALITY_SLIDER.left + (i / SEASONALITY_MAX_INDEX) * track;
+
+    elements.push({
+      id: `seasonality-slider-grid-${i}`,
+      type: "line",
+      silent: true,
+      z: 1,
+      shape: { x1: x, y1, x2: x, y2 },
+      style: { stroke: X_GRID_COLOR, lineWidth: 1 },
+    });
+  }
+
+  return elements;
 }
 
 
@@ -3877,6 +3929,9 @@ async function init() {
 
         if (seasonalityChart) {
           seasonalityChart.resize();
+          seasonalityChart.setOption({
+            graphic: buildSeasonalitySliderGrid(),
+          });
         }
       }
     );
