@@ -1472,9 +1472,20 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = meta.key;
         state.seasonalityYears = new Set(getSeasonalityYears(meta));
         state.seasonalityYearsInitialized = true;
-        state.seasonalityMonthStart = 0;
-        state.seasonalityMonthEnd = 11;
-        state.seasonalityMonthRangeInitialized = false;
+
+        /*
+         * Диапазон месяцев: если выбрано меньше 8 месяцев — он
+         * сохраняется при смене показателя; если 8 и больше —
+         * сбрасывается на все 12.
+         */
+        const selectedMonths =
+          state.seasonalityMonthEnd - state.seasonalityMonthStart + 1;
+
+        if (selectedMonths >= 8) {
+          state.seasonalityMonthStart = 0;
+          state.seasonalityMonthEnd = 11;
+          state.seasonalityMonthRangeInitialized = false;
+        }
 
         container
           .querySelectorAll('input[type="checkbox"]')
@@ -1487,9 +1498,7 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = null;
         state.seasonalityYears = new Set();
         state.seasonalityYearsInitialized = false;
-        state.seasonalityMonthStart = 0;
-        state.seasonalityMonthEnd = 11;
-        state.seasonalityMonthRangeInitialized = false;
+        /* Диапазон месяцев при снятии галочки не трогаем. */
       }
 
       buildSeasonalityYearsPanel();
