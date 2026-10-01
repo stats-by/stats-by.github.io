@@ -1796,13 +1796,61 @@ function seasonalityPercentToIndex(percent) {
 function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
-  /* Базовый slider ECharts — без кастомных настроек. */
+  const start = seasonalityIndexToPercent(state.seasonalityMonthStart);
+  const end = seasonalityIndexToPercent(state.seasonalityMonthEnd);
+
+  /* Тот же таймлайн, что и под основным графиком (геометрия DefiLlama). */
   return [
+    {
+      type: "inside",
+      xAxisIndex: 0,
+      start,
+      end,
+    },
     {
       type: "slider",
       xAxisIndex: 0,
-      start: seasonalityIndexToPercent(state.seasonalityMonthStart),
-      end: seasonalityIndexToPercent(state.seasonalityMonthEnd),
+      start,
+      end,
+
+      /* Выделение нового диапазона протяжкой по слайдеру отключено. */
+      brushSelect: false,
+
+      left: 8,
+      right: 14,
+      bottom: 19,
+      height: 30,
+
+      borderColor: "#232B36",
+      backgroundColor: "transparent",
+      fillerColor: "rgba(61,220,132,0.10)",
+
+      handleStyle: {
+        color: "#1A222B",
+        borderColor: "#5B6673",
+      },
+      moveHandleStyle: {
+        color: "#2A3440",
+      },
+      selectedDataBackground: {
+        lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
+        areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
+      },
+      emphasis: {
+        handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+        moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
+      },
+
+      textStyle: {
+        color: "#5B6673",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+      },
+
+      labelFormatter: (value, valueStr) => {
+        const month = MONTH_NAMES_RU[Math.round(value)];
+        return month ? month.slice(0, 3) : valueStr;
+      },
     },
   ];
 }
@@ -2901,6 +2949,9 @@ function buildOption() {
         xAxisIndex: 0,
         start: state.zoomStart,
         end: state.zoomEnd,
+
+        /* Выделение нового диапазона протяжкой по слайдеру отключено. */
+        brushSelect: false,
 
         /* Геометрия DefiLlama */
         left: 8,
