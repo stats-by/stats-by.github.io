@@ -1906,71 +1906,76 @@ function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
   /*
-   * Самый простой слайдер: без inside-зума, без кастомных стилей.
-   * Границы задаём индексами месяцев (startValue / endValue), а не
-   * процентами, чтобы не было дрейфа из-за округления.
-   * Размеры — как у слайдера под основным графиком.
+   * Встроенный слайдер ECharts здесь только управляет видимым окном
+   * (show: false — сам он не рисуется и не реагирует на касания).
+   * Ручки и рамку рисуем сами (buildSeasonalitySliderGrid), чтобы
+   * границы двигались строго по месяцам: ручка «стопорится» на каждом
+   * месяце и не может встать между двумя.
    */
   return [
     {
       type: "slider",
+      show: false,
       xAxisIndex: 0,
       startValue: state.seasonalityMonthStart,
       endValue: state.seasonalityMonthEnd,
       brushSelect: false,
-
-      /* Без мини-графика внутри слайдера. */
       showDataShadow: false,
-
-      /*
-       * Пошаговое движение границ по месяцам: ось категорий, а
-       * realtime: true заставляет ручки «прыгать» от месяца к месяцу
-       * прямо во время перетаскивания (при false они ехали плавно и
-       * встали на месяц только после отпускания).
-       */
-      realtime: true,
-
-      /* Геометрия и вид — как у слайдера основного графика. */
-      left: 8,
-      right: 14,
-      bottom: 19,
-      height: 30,
-
-      ...buildSliderStyle(false),
-
-      labelFormatter: (value, valueStr) => {
-        const month = getSeasonalityMonths()[Math.round(value)];
-        return month || valueStr;
-      },
     },
   ];
 }
 
 
 /*
- * Вертикальные линии по месяцам на таймлайне (слайдере) сезонности.
- * У слайдера ECharts нет собственной сетки, поэтому рисуем линии
- * элементами graphic по геометрии слайдера (left 8, right 14,
- * bottom 19, height 30). 12 месяцев равномерно по ширине дорожки.
+ * Таймлайн сезонности: вертикальные линии по месяцам + своя рамка,
+ * закрашенное окно, две ручки и подписи месяцев. Геометрия — как у
+ * слайдера основного графика (left 8, right 14, bottom 19, height 30).
+ * 12 месяцев равномерно по ширине дорожки.
  */
 const SEASONALITY_SLIDER = { left: 8, right: 14, bottom: 19, height: 30 };
 
-function buildSeasonalitySliderGrid() {
+const SEASONALITY_HANDLE_W = 10;
+const SEASONALITY_HANDLE_H = 38;
+const SEASONALITY_HIT_TOLERANCE = 16;   /* px вокруг ручки, куда можно «попасть» */
+
+function getSeasonalitySliderGeometry() {
   const width = seasonalityChart ? seasonalityChart.getWidth() : 0;
   const height = seasonalityChart ? seasonalityChart.getHeight() : 0;
 
   if (!width || !height) {
-    return [];
+    return null;
   }
 
   const track = width - SEASONALITY_SLIDER.left - SEASONALITY_SLIDER.right;
   const y2 = height - SEASONALITY_SLIDER.bottom;
   const y1 = y2 - SEASONALITY_SLIDER.height;
+
+  return {
+    width,
+    height,
+    track,
+    y1,
+    y2,
+    step: track / SEASONALITY_MAX_INDEX,
+    x: (index) =>
+      SEASONALITY_SLIDER.left + (index / SEASONALITY_MAX_INDEX) * track,
+  };
+}
+
+
+function buildSeasonalitySliderGrid() {
+  const geo = getSeasonalitySliderGeometry();
+
+  if (!geo) {
+    return [];
+  }
+
+  const { y1, y2, track } = geo;
   const elements = [];
 
   /* Крайние линии совпадают с рамкой слайдера — их не рисуем. */
   for (let i = 1; i < SEASONALITY_MAX_INDEX; i++) {
-    const x = SEASONALITY_SLIDER.left + (i / SEASONALITY_MAX_INDEX) * track;
+    const x = geo.x(i);
 
     elements.push({
       id: `seasonality-slider-grid-${i}`,
@@ -1982,7 +1987,263 @@ function buildSeasonalitySliderGrid() {
     });
   }
 
+  const start = state.seasonalityMonthStart;
+  const end = state.seasonalityMonthEnd;
+  const xs = geo.x(start);
+  const xe = geo.x(end);
+  const centerY = (y1 + y2) / 2;
+  const months = getSeasonalityMonths();
+
+  /* Закрашенное окно между ручками. */
+  elements.push({
+    id: "seasonality-slider-filler",
+    type: "rect",
+    z: 2,
+    cursor: "grab",
+    shape: { x: xs, y: y1, width: Math.max(0, xe - xs), height: y2 - y1 },
+    style: { fill: "rgba(0,0,0,0.1)" },
+  });
+
+  /* Рамка дорожки. */
+  elements.push({
+    id: "seasonality-slider-border",
+    type: "rect",
+    silent: true,
+    z: 3,
+    shape: {
+      x: SEASONALITY_SLIDER.left,
+      y: y1,
+      width: track,
+      height: y2 - y1,
+    },
+    style: {
+      fill: "transparent",
+      stroke: "rgba(255,255,255,0.4)",
+      lineWidth: 1,
+    },
+  });
+
+  /* Две ручки: всегда стоят ровно на границе месяца. */
+  [["start", xs], ["end", xe]].forEach(([name, x]) => {
+    elements.push({
+      id: `seasonality-slider-handle-${name}`,
+      type: "rect",
+      z: 5,
+      cursor: "ew-resize",
+      x,
+      y: centerY,
+      shape: {
+        x: -SEASONALITY_HANDLE_W / 2,
+        y: -SEASONALITY_HANDLE_H / 2,
+        width: SEASONALITY_HANDLE_W,
+        height: SEASONALITY_HANDLE_H,
+        r: 3,
+      },
+      style: {
+        fill: "rgba(0,0,0,0.4)",
+        stroke: "rgba(255,255,255,0.9)",
+        lineWidth: 1.5,
+      },
+    });
+  });
+
+  /* Подписи месяцев под дорожкой (если ручки на одном месяце — одна). */
+  const clampLabelX = (x) => Math.max(16, Math.min(geo.width - 16, x));
+
+  [["start", xs, start, false], ["end", xe, end, start === end]].forEach(
+    ([name, x, index, hidden]) => {
+      elements.push({
+        id: `seasonality-slider-label-${name}`,
+        type: "text",
+        silent: true,
+        z: 5,
+        invisible: hidden,
+        x: clampLabelX(x),
+        y: y2 + 4,
+        style: {
+          text: months[index] || "",
+          fill: "#878787",
+          font: "11px ui-monospace, Menlo, Consolas, monospace",
+          align: "center",
+          verticalAlign: "top",
+        },
+      });
+    }
+  );
+
   return elements;
+}
+
+
+/*
+ * Применить новое окно месяцев: состояние, видимая область графика,
+ * положение ручек и (в процентном режиме) база 100%.
+ */
+function applySeasonalityRange(start, end) {
+  if (!seasonalityChart) return;
+
+  start = Math.max(0, Math.min(SEASONALITY_MAX_INDEX, start));
+  end = Math.max(start, Math.min(SEASONALITY_MAX_INDEX, end));
+
+  if (
+    start === state.seasonalityMonthStart &&
+    end === state.seasonalityMonthEnd
+  ) {
+    return;
+  }
+
+  state.seasonalityMonthStart = start;
+  state.seasonalityMonthEnd = end;
+  state.seasonalityMonthRangeInitialized = true;
+
+  seasonalityChart.dispatchAction({
+    type: "dataZoom",
+    dataZoomIndex: 0,
+    startValue: start,
+    endValue: end,
+  });
+
+  seasonalityChart.setOption({ graphic: buildSeasonalitySliderGrid() });
+
+  if (state.seasonalityMode === "percent") {
+    const meta = metaByKey(state.seasonalityKey);
+
+    if (meta) {
+      seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
+    }
+  }
+}
+
+
+/*
+ * Перетаскивание ручек. Положение курсора каждый раз переводим в
+ * ближайший месяц, поэтому ручка шагает по месяцам и не бывает
+ * «между» ними. Слушатели на window — чтобы перетаскивание не
+ * обрывалось, когда курсор/палец ушёл за пределы графика.
+ */
+function wireSeasonalitySlider() {
+  if (!seasonalityChart) return;
+
+  const dom = seasonalityChart.getDom();
+  let drag = null;
+
+  const pointOf = (event) => {
+    const touch =
+      (event.touches && event.touches[0]) ||
+      (event.changedTouches && event.changedTouches[0]) ||
+      event;
+    const rect = dom.getBoundingClientRect();
+
+    return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+  };
+
+  const indexAt = (x, geo) =>
+    Math.max(
+      0,
+      Math.min(
+        SEASONALITY_MAX_INDEX,
+        Math.round((x - SEASONALITY_SLIDER.left) / geo.step)
+      )
+    );
+
+  const detect = (point, geo) => {
+    const margin = SEASONALITY_HIT_TOLERANCE;
+
+    if (point.y < geo.y1 - margin || point.y > geo.y2 + margin) {
+      return null;
+    }
+
+    const start = state.seasonalityMonthStart;
+    const end = state.seasonalityMonthEnd;
+    const xs = geo.x(start);
+    const xe = geo.x(end);
+    const ds = Math.abs(point.x - xs);
+    const de = Math.abs(point.x - xe);
+
+    if (ds <= margin || de <= margin) {
+      if (start === end) return "pending";
+      return ds <= de ? "start" : "end";
+    }
+
+    if (point.x > xs && point.x < xe) return "move";
+
+    return null;
+  };
+
+  const onMove = (event) => {
+    if (!drag) return;
+
+    if (event.cancelable) event.preventDefault();
+
+    const geo = getSeasonalitySliderGeometry();
+    if (!geo) return;
+
+    const index = indexAt(pointOf(event).x, geo);
+    let { mode } = drag;
+    let start = drag.start;
+    let end = drag.end;
+
+    if (mode === "pending") {
+      if (index === drag.start) return;
+      mode = index < drag.start ? "start" : "end";
+      drag.mode = mode;
+    }
+
+    if (mode === "start") {
+      start = Math.min(index, drag.end);
+    } else if (mode === "end") {
+      end = Math.max(index, drag.start);
+    } else {
+      const span = drag.end - drag.start;
+      start = Math.max(
+        0,
+        Math.min(SEASONALITY_MAX_INDEX - span, drag.start + index - drag.grab)
+      );
+      end = start + span;
+    }
+
+    applySeasonalityRange(start, end);
+  };
+
+  const onUp = () => {
+    drag = null;
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+    window.removeEventListener("touchmove", onMove);
+    window.removeEventListener("touchend", onUp);
+    window.removeEventListener("touchcancel", onUp);
+  };
+
+  const onDown = (event) => {
+    if (event.type === "mousedown" && event.button !== 0) return;
+
+    const geo = getSeasonalitySliderGeometry();
+    if (!geo) return;
+
+    const point = pointOf(event);
+    const mode = detect(point, geo);
+
+    if (!mode) return;
+
+    /* Не даём странице прокручиваться / выделять текст при перетаскивании. */
+    if (event.cancelable) event.preventDefault();
+
+    drag = {
+      mode,
+      start: state.seasonalityMonthStart,
+      end: state.seasonalityMonthEnd,
+      grab: indexAt(point.x, geo),
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    window.addEventListener("touchmove", onMove, { passive: false });
+    window.addEventListener("touchend", onUp);
+    window.addEventListener("touchcancel", onUp);
+  };
+
+  dom.addEventListener("mousedown", onDown);
+  dom.addEventListener("touchstart", onDown, { passive: false });
 }
 
 
@@ -4077,6 +4338,7 @@ async function init() {
      */
     wireDataZoom();
     wireSeasonalityDataZoom();
+    wireSeasonalitySlider();
 
     /*
      * Responsive.
