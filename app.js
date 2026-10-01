@@ -60,13 +60,13 @@ const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
  * Ширины — оценка в пикселях для шрифта 12px: нужны только для того,
  * чтобы решить, какие годы между крайними подписями поместятся.
  */
-const X_EDGE_LABEL_PX = 38;   /* «сен 2026» */
-const X_YEAR_LABEL_PX = 24;   /* «2021» */
+const X_EDGE_LABEL_PX = 46;   /* «сен 2026» */
+const X_YEAR_LABEL_PX = 28;   /* «2021» */
 const X_LABEL_GAP_PX = 10;    /* минимальный зазор между подписями */
 
 /* Размеры шрифтов подписей осей. */
-const X_LABEL_FONT_PX = 8;    /* годы / месяцы под графиком */
-const AXIS_FONT_PX = 8.5;     /* шкалы слева и справа */
+const X_LABEL_FONT_PX = 10;   /* годы / месяцы под графиком */
+const AXIS_FONT_PX = 10;      /* шкалы слева и справа */
 const X_YEAR_STEPS = [1, 2, 5, 10];
 
 /* Пунктир «100%» — общий для основного графика и сезонности. */
@@ -1771,8 +1771,8 @@ function buildSeasonalityOption() {
     },
 
     grid: {
-      left: 30,
-      right: 14,
+      left: 34,
+      right: 8,
       top: 16,
       bottom: 84,
       containLabel: false,
@@ -2546,11 +2546,11 @@ function getMonthIndex(month) {
 
 /* Отступ сетки слева/справа (одинаков для обеих сторон). */
 function getMainGridLeft() {
-  return 32;
+  return 34;
 }
 
 function getMainGridRight() {
-  return state.mode === "percent" ? 12 : 26;
+  return state.mode === "percent" ? 4 : 28;
 }
 
 
