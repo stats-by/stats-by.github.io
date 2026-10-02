@@ -1374,13 +1374,14 @@ function syncSeasonalityMonthState() {
     return;
   }
 
+  /* Между границами всегда остаётся минимум один месяц. */
   state.seasonalityMonthStart = Math.max(
     0,
-    Math.min(state.seasonalityMonthStart, max)
+    Math.min(state.seasonalityMonthStart, max - SEASONALITY_MIN_SPAN)
   );
 
   state.seasonalityMonthEnd = Math.max(
-    state.seasonalityMonthStart,
+    state.seasonalityMonthStart + SEASONALITY_MIN_SPAN,
     Math.min(state.seasonalityMonthEnd, max)
   );
 }
@@ -1885,6 +1886,9 @@ function renderSeasonality() {
 
 const SEASONALITY_MAX_INDEX = 11;
 
+/* Минимальный зазор между границами таймлайна, в месяцах. */
+const SEASONALITY_MIN_SPAN = 1;
+
 
 function seasonalityIndexToPercent(index) {
   return (index / SEASONALITY_MAX_INDEX) * 100;
@@ -2082,8 +2086,14 @@ function buildSeasonalitySliderGrid() {
 function applySeasonalityRange(start, end) {
   if (!seasonalityChart) return;
 
-  start = Math.max(0, Math.min(SEASONALITY_MAX_INDEX, start));
-  end = Math.max(start, Math.min(SEASONALITY_MAX_INDEX, end));
+  start = Math.max(
+    0,
+    Math.min(SEASONALITY_MAX_INDEX - SEASONALITY_MIN_SPAN, start)
+  );
+  end = Math.max(
+    start + SEASONALITY_MIN_SPAN,
+    Math.min(SEASONALITY_MAX_INDEX, end)
+  );
 
   if (
     start === state.seasonalityMonthStart &&
@@ -2190,9 +2200,9 @@ function wireSeasonalitySlider() {
     }
 
     if (mode === "start") {
-      start = Math.min(index, drag.end);
+      start = Math.min(index, drag.end - SEASONALITY_MIN_SPAN);
     } else if (mode === "end") {
-      end = Math.max(index, drag.start);
+      end = Math.max(index, drag.start + SEASONALITY_MIN_SPAN);
     } else {
       const span = drag.end - drag.start;
       start = Math.max(
