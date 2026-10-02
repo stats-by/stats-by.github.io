@@ -1952,72 +1952,8 @@ function buildSeasonalityDataZoom() {
  */
 const SEASONALITY_SLIDER = { left: 8, right: 14, bottom: 19, height: 30 };
 
-/*
- * Ручки таймлайна — одинаковые на обоих графиках, как у DefiLlama:
- * тонкая вертикальная линия на всю высоту слайдера + небольшая
- * «таблетка» по центру. Рисуем их сами (graphic), а зону попадания
- * делаем отдельной и широкой — поэтому по ручке легко попасть.
- */
-const HANDLE_COLOR = "rgba(255,255,255,0.9)";
-const HANDLE_PILL_FILL = "rgba(0,0,0,0.85)";
-const HANDLE_LINE_WIDTH = 1.5;
-const HANDLE_PILL_W = 6;
-const HANDLE_PILL_H = 20;
-const HANDLE_PILL_RADIUS = 2.5;
-const HANDLE_PILL_BORDER = 1;
-const HANDLE_HIT_W = 26;         /* ширина невидимой зоны попадания */
-
-function buildSliderHandleElements(idPrefix, x, y1, y2, withHitZone) {
-  const centerY = (y1 + y2) / 2;
-
-  const elements = [
-    {
-      id: `${idPrefix}-line`,
-      type: "line",
-      silent: true,
-      z: 100,
-      shape: { x1: x, y1, x2: x, y2 },
-      style: { stroke: HANDLE_COLOR, lineWidth: HANDLE_LINE_WIDTH },
-    },
-    {
-      id: `${idPrefix}-pill`,
-      type: "rect",
-      silent: true,
-      z: 101,
-      shape: {
-        x: x - HANDLE_PILL_W / 2,
-        y: centerY - HANDLE_PILL_H / 2,
-        width: HANDLE_PILL_W,
-        height: HANDLE_PILL_H,
-        r: HANDLE_PILL_RADIUS,
-      },
-      style: {
-        fill: HANDLE_PILL_FILL,
-        stroke: HANDLE_COLOR,
-        lineWidth: HANDLE_PILL_BORDER,
-      },
-    },
-  ];
-
-  /* Невидимая зона только для курсора (само перетаскивание — в wireSeasonalitySlider). */
-  if (withHitZone) {
-    elements.push({
-      id: `${idPrefix}-hit`,
-      type: "rect",
-      z: 102,
-      cursor: "ew-resize",
-      shape: {
-        x: x - HANDLE_HIT_W / 2,
-        y: y1 - 4,
-        width: HANDLE_HIT_W,
-        height: y2 - y1 + 8,
-      },
-      style: { fill: "rgba(0,0,0,0.001)" },
-    });
-  }
-
-  return elements;
-}
+const SEASONALITY_HANDLE_W = 10;
+const SEASONALITY_HANDLE_H = 38;
 const SEASONALITY_HIT_TOLERANCE = 16;   /* px вокруг ручки, куда можно «попасть» */
 
 function getSeasonalitySliderGeometry() {
@@ -2073,6 +2009,7 @@ function buildSeasonalitySliderGrid() {
   const end = state.seasonalityMonthEnd;
   const xs = geo.x(start);
   const xe = geo.x(end);
+  const centerY = (y1 + y2) / 2;
   const months = getSeasonalityMonths();
 
   /* Закрашенное окно между ручками. */
@@ -2106,13 +2043,26 @@ function buildSeasonalitySliderGrid() {
 
   /* Две ручки: всегда стоят ровно на границе месяца. */
   [["start", xs], ["end", xe]].forEach(([name, x]) => {
-    buildSliderHandleElements(
-      `seasonality-slider-handle-${name}`,
+    elements.push({
+      id: `seasonality-slider-handle-${name}`,
+      type: "rect",
+      z: 5,
+      cursor: "ew-resize",
       x,
-      y1,
-      y2,
-      true
-    ).forEach((element) => elements.push(element));
+      y: centerY,
+      shape: {
+        x: -SEASONALITY_HANDLE_W / 2,
+        y: -SEASONALITY_HANDLE_H / 2,
+        width: SEASONALITY_HANDLE_W,
+        height: SEASONALITY_HANDLE_H,
+        r: 3,
+      },
+      style: {
+        fill: "rgba(0,0,0,0.4)",
+        stroke: "rgba(255,255,255,0.9)",
+        lineWidth: 1.5,
+      },
+    });
   });
 
   /* Подписи месяцев под дорожкой (если ручки на одном месяце — одна). */
@@ -3440,58 +3390,8 @@ function buildOption() {
       },
     ],
 
-    graphic: buildMainSliderGraphic(),
-
     series: buildSeries(),
   };
-}
-
-
-/* ============================================================
-   Ручки таймлайна основного графика (линия + таблетка)
-   ============================================================ */
-
-function buildMainSliderGraphic() {
-  const width = chart ? chart.getWidth() : 0;
-  const height = chart ? chart.getHeight() : 0;
-
-  if (!width || !height) {
-    return [];
-  }
-
-  const track = width - SEASONALITY_SLIDER.left - SEASONALITY_SLIDER.right;
-  const y2 = height - SEASONALITY_SLIDER.bottom;
-  const y1 = y2 - SEASONALITY_SLIDER.height;
-
-  const xOf = (percent) =>
-    SEASONALITY_SLIDER.left + (Number(percent) / 100) * track;
-
-  return [
-    ...buildSliderHandleElements(
-      "main-slider-handle-start", xOf(state.zoomStart), y1, y2, false
-    ),
-    ...buildSliderHandleElements(
-      "main-slider-handle-end", xOf(state.zoomEnd), y1, y2, false
-    ),
-  ];
-}
-
-
-let mainSliderGraphicFrame = null;
-
-/* Обновляем ручки в следующем кадре: setOption нельзя вызывать прямо из события ECharts. */
-function scheduleMainSliderGraphic() {
-  if (mainSliderGraphicFrame) {
-    return;
-  }
-
-  mainSliderGraphicFrame = requestAnimationFrame(() => {
-    mainSliderGraphicFrame = null;
-
-    if (chart) {
-      chart.setOption({ graphic: buildMainSliderGraphic() });
-    }
-  });
 }
 
 
@@ -3499,17 +3399,8 @@ function scheduleMainSliderGraphic() {
    Стиль слайдера (общий для обоих графиков)
    ============================================================ */
 
-/*
- * Нативные ручки ECharts на основном графике невидимы: они нужны только
- * как широкая зона попадания (~25 × 37 px) с родным перетаскиванием.
- * Сам вид ручек (линия + таблетка) рисует buildMainSliderGraphic().
- */
-const SLIDER_HANDLE_ICON = "path://M-4,-6h8v12h-8z";
-const SLIDER_HANDLE_INVISIBLE = {
-  color: "rgba(0,0,0,0.001)",
-  borderColor: "rgba(0,0,0,0)",
-  borderWidth: 0,
-};
+const SLIDER_HANDLE_ICON =
+  "path://M-2,-10h4a3,3 0 0 1 3,3v14a3,3 0 0 1 -3,3h-4a3,3 0 0 1 -3,-3v-14a3,3 0 0 1 3,-3z";
 
 function buildSliderStyle(withShadow) {
   return {
@@ -3521,7 +3412,11 @@ function buildSliderStyle(withShadow) {
 
     handleIcon: SLIDER_HANDLE_ICON,
     handleSize: "125%",
-    handleStyle: SLIDER_HANDLE_INVISIBLE,
+    handleStyle: {
+      color: "rgba(0,0,0,0.4)",
+      borderColor: "rgba(255,255,255,0.9)",
+      borderWidth: 1.5,
+    },
 
     /* «Гриппер» над выделенным окном. */
     moveHandleSize: 8,
@@ -3540,7 +3435,7 @@ function buildSliderStyle(withShadow) {
     },
 
     emphasis: {
-      handleStyle: SLIDER_HANDLE_INVISIBLE,
+      handleStyle: { borderColor: "#ffffff", color: "rgba(255,255,255,0.2)" },
       moveHandleStyle: { color: "#7d8185" },
     },
 
@@ -4174,7 +4069,6 @@ function wireDataZoom() {
     state.zoomAnchorEnd = end;
     state.zoomPreset = null;
     updateZoomPresetButtons();
-    scheduleMainSliderGraphic();
 
     /*
      * В процентном режиме 100% зависит от левой границы. Обновляем только
@@ -4493,7 +4387,6 @@ async function init() {
       () => {
         if (chart) {
           chart.resize();
-          chart.setOption({ graphic: buildMainSliderGraphic() });
         }
 
         if (seasonalityChart) {
