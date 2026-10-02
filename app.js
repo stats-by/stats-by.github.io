@@ -1952,8 +1952,68 @@ function buildSeasonalityDataZoom() {
  */
 const SEASONALITY_SLIDER = { left: 8, right: 14, bottom: 19, height: 30 };
 
-const SEASONALITY_HANDLE_W = 10;
-const SEASONALITY_HANDLE_H = 38;
+/*
+ * Ручки таймлайна — одинаковые на обоих графиках, как у DefiLlama:
+ * тонкая вертикальная линия на всю высоту слайдера + небольшая
+ * «таблетка» по центру. Вид рисуем отдельно от зоны попадания:
+ * зона широкая и невидимая, поэтому по ручке легко попасть.
+ */
+const HANDLE_COLOR = "rgba(255,255,255,0.9)";
+const HANDLE_PILL_FILL = "rgba(0,0,0,0.85)";
+const HANDLE_LINE_WIDTH = 1.5;
+const HANDLE_PILL_W = 6;
+const HANDLE_PILL_H = 20;
+const HANDLE_PILL_RADIUS = 2.5;
+const HANDLE_PILL_BORDER = 1;
+const HANDLE_HIT_W = 26;         /* ширина невидимой зоны на графике сезонности */
+
+/* Ручка для графика сезонности (элементы компонента graphic). */
+function buildSliderHandleElements(idPrefix, x, y1, y2) {
+  const centerY = (y1 + y2) / 2;
+
+  return [
+    {
+      id: `${idPrefix}-line`,
+      type: "line",
+      silent: true,
+      z: 100,
+      shape: { x1: x, y1, x2: x, y2 },
+      style: { stroke: HANDLE_COLOR, lineWidth: HANDLE_LINE_WIDTH },
+    },
+    {
+      id: `${idPrefix}-pill`,
+      type: "rect",
+      silent: true,
+      z: 101,
+      shape: {
+        x: x - HANDLE_PILL_W / 2,
+        y: centerY - HANDLE_PILL_H / 2,
+        width: HANDLE_PILL_W,
+        height: HANDLE_PILL_H,
+        r: HANDLE_PILL_RADIUS,
+      },
+      style: {
+        fill: HANDLE_PILL_FILL,
+        stroke: HANDLE_COLOR,
+        lineWidth: HANDLE_PILL_BORDER,
+      },
+    },
+    /* Невидимая зона только для курсора; перетаскивание — в wireSeasonalitySlider. */
+    {
+      id: `${idPrefix}-hit`,
+      type: "rect",
+      z: 102,
+      cursor: "ew-resize",
+      shape: {
+        x: x - HANDLE_HIT_W / 2,
+        y: y1 - 4,
+        width: HANDLE_HIT_W,
+        height: y2 - y1 + 8,
+      },
+      style: { fill: "rgba(0,0,0,0.001)" },
+    },
+  ];
+}
 const SEASONALITY_HIT_TOLERANCE = 16;   /* px вокруг ручки, куда можно «попасть» */
 
 function getSeasonalitySliderGeometry() {
@@ -2009,7 +2069,6 @@ function buildSeasonalitySliderGrid() {
   const end = state.seasonalityMonthEnd;
   const xs = geo.x(start);
   const xe = geo.x(end);
-  const centerY = (y1 + y2) / 2;
   const months = getSeasonalityMonths();
 
   /* Закрашенное окно между ручками. */
@@ -2043,26 +2102,9 @@ function buildSeasonalitySliderGrid() {
 
   /* Две ручки: всегда стоят ровно на границе месяца. */
   [["start", xs], ["end", xe]].forEach(([name, x]) => {
-    elements.push({
-      id: `seasonality-slider-handle-${name}`,
-      type: "rect",
-      z: 5,
-      cursor: "ew-resize",
-      x,
-      y: centerY,
-      shape: {
-        x: -SEASONALITY_HANDLE_W / 2,
-        y: -SEASONALITY_HANDLE_H / 2,
-        width: SEASONALITY_HANDLE_W,
-        height: SEASONALITY_HANDLE_H,
-        r: 3,
-      },
-      style: {
-        fill: "rgba(0,0,0,0.4)",
-        stroke: "rgba(255,255,255,0.9)",
-        lineWidth: 1.5,
-      },
-    });
+    buildSliderHandleElements(
+      `seasonality-slider-handle-${name}`, x, y1, y2
+    ).forEach((element) => elements.push(element));
   });
 
   /* Подписи месяцев под дорожкой (если ручки на одном месяце — одна). */
@@ -3396,11 +3438,117 @@ function buildOption() {
 
 
 /* ============================================================
+   Вид ручек таймлайна основного графика (линия + таблетка)
+   ============================================================
+   Рисуем напрямую в zrender, вне компонентов ECharts, и двигаем
+   через attr() — без setOption. Так слайдер не пересоздаётся под
+   пальцем, и родное перетаскивание работает как раньше.
+   Элементы silent: события получает невидимая нативная ручка.
+   ============================================================ */
+
+let mainSliderOverlay = null;
+
+function ensureMainSliderOverlay() {
+  if (mainSliderOverlay) {
+    return mainSliderOverlay;
+  }
+
+  if (!chart || !echarts.graphic) {
+    return null;
+  }
+
+  const graphic = echarts.graphic;
+  const group = new graphic.Group();
+  const overlay = { group };
+
+  ["start", "end"].forEach((name) => {
+    overlay[name] = {
+      line: new graphic.Line({
+        silent: true,
+        z: 100,
+        shape: { x1: 0, y1: 0, x2: 0, y2: 0 },
+        style: { stroke: HANDLE_COLOR, lineWidth: HANDLE_LINE_WIDTH },
+      }),
+      pill: new graphic.Rect({
+        silent: true,
+        z: 101,
+        shape: {
+          x: 0,
+          y: 0,
+          width: HANDLE_PILL_W,
+          height: HANDLE_PILL_H,
+          r: HANDLE_PILL_RADIUS,
+        },
+        style: {
+          fill: HANDLE_PILL_FILL,
+          stroke: HANDLE_COLOR,
+          lineWidth: HANDLE_PILL_BORDER,
+        },
+      }),
+    };
+
+    group.add(overlay[name].line);
+    group.add(overlay[name].pill);
+  });
+
+  chart.getZr().add(group);
+  mainSliderOverlay = overlay;
+
+  return overlay;
+}
+
+
+function updateMainSliderOverlay() {
+  const overlay = ensureMainSliderOverlay();
+
+  if (!overlay) {
+    return;
+  }
+
+  const width = chart.getWidth();
+  const height = chart.getHeight();
+
+  if (!width || !height) {
+    return;
+  }
+
+  /* Та же геометрия, что у dataZoom slider: left 8, right 14, bottom 19, height 30. */
+  const track = width - SEASONALITY_SLIDER.left - SEASONALITY_SLIDER.right;
+  const y2 = height - SEASONALITY_SLIDER.bottom;
+  const y1 = y2 - SEASONALITY_SLIDER.height;
+  const centerY = (y1 + y2) / 2;
+
+  [["start", state.zoomStart], ["end", state.zoomEnd]].forEach(
+    ([name, percent]) => {
+      const x = SEASONALITY_SLIDER.left + (Number(percent) / 100) * track;
+
+      overlay[name].line.attr({ shape: { x1: x, y1, x2: x, y2 } });
+      overlay[name].pill.attr({
+        shape: {
+          x: x - HANDLE_PILL_W / 2,
+          y: centerY - HANDLE_PILL_H / 2,
+        },
+      });
+    }
+  );
+}
+
+
+/* ============================================================
    Стиль слайдера (общий для обоих графиков)
    ============================================================ */
 
-const SLIDER_HANDLE_ICON =
-  "path://M-2,-10h4a3,3 0 0 1 3,3v14a3,3 0 0 1 -3,3h-4a3,3 0 0 1 -3,-3v-14a3,3 0 0 1 3,-3z";
+/*
+ * Нативные ручки ECharts на основном графике невидимы: они остаются
+ * широкой зоной попадания (~25 × 37 px) с родным перетаскиванием.
+ * Вид ручек (линия + таблетка) рисует updateMainSliderOverlay().
+ */
+const SLIDER_HANDLE_ICON = "path://M-4,-6h8v12h-8z";
+const SLIDER_HANDLE_INVISIBLE = {
+  color: "rgba(0,0,0,0.001)",
+  borderColor: "rgba(0,0,0,0)",
+  borderWidth: 0,
+};
 
 function buildSliderStyle(withShadow) {
   return {
@@ -3412,11 +3560,7 @@ function buildSliderStyle(withShadow) {
 
     handleIcon: SLIDER_HANDLE_ICON,
     handleSize: "125%",
-    handleStyle: {
-      color: "rgba(0,0,0,0.4)",
-      borderColor: "rgba(255,255,255,0.9)",
-      borderWidth: 1.5,
-    },
+    handleStyle: SLIDER_HANDLE_INVISIBLE,
 
     /* «Гриппер» над выделенным окном. */
     moveHandleSize: 8,
@@ -3435,7 +3579,7 @@ function buildSliderStyle(withShadow) {
     },
 
     emphasis: {
-      handleStyle: { borderColor: "#ffffff", color: "rgba(255,255,255,0.2)" },
+      handleStyle: SLIDER_HANDLE_INVISIBLE,
       moveHandleStyle: { color: "#7d8185" },
     },
 
@@ -3534,6 +3678,8 @@ function render() {
     document.getElementById("chart"),
     state.hoveredMainSeriesId
   );
+
+  updateMainSliderOverlay();
 }
 
 
@@ -4069,6 +4215,7 @@ function wireDataZoom() {
     state.zoomAnchorEnd = end;
     state.zoomPreset = null;
     updateZoomPresetButtons();
+    updateMainSliderOverlay();
 
     /*
      * В процентном режиме 100% зависит от левой границы. Обновляем только
@@ -4387,6 +4534,7 @@ async function init() {
       () => {
         if (chart) {
           chart.resize();
+          updateMainSliderOverlay();
         }
 
         if (seasonalityChart) {
