@@ -1745,7 +1745,6 @@ function buildSeasonalityTooltipFormatter(params) {
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
-        <span class="tt-bar" style="background:${color};"></span>
         <span class="tt-dot" style="background:${color};"></span>
         <span class="tt-name">${param.seriesName}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
@@ -1798,13 +1797,13 @@ function buildSeasonalityOption() {
       backgroundColor: "#181a1b",
       borderColor: "rgba(255,255,255,0.12)",
       borderWidth: 1,
-      padding: 12,
+      padding: [12, 16],
       textStyle: {
         color: "#ffffff",
-        fontSize: 12,
+        fontSize: 13,
       },
       extraCssText:
-        "border-radius:6px;" +
+        "border-radius:8px;" +
         "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
         "pointer-events:none;",
       formatter: buildSeasonalityTooltipFormatter,
@@ -3182,7 +3181,6 @@ function buildTooltipFormatter(params) {
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
-        <span class="tt-bar" style="background:${color};"></span>
         <span class="tt-dot" style="background:${color};"></span>
         <span class="tt-name">${getSeriesLabel(meta)}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
@@ -3250,15 +3248,15 @@ function buildOption() {
       borderColor: "rgba(255,255,255,0.12)",
       borderWidth: 1,
 
-      padding: 12,
+      padding: [12, 16],
 
       textStyle: {
         color: "#ffffff",
-        fontSize: 12,
+        fontSize: 13,
       },
 
       extraCssText:
-        "border-radius:6px;" +
+        "border-radius:8px;" +
         "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
         "pointer-events:none;",
 
