@@ -2428,12 +2428,6 @@ function updateTooltipHighlight(chartContainer, activeSeriesId) {
 function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   if (!chartInstance || !chartElement) return;
 
-  /*
-   * На тач-экране касание графика только показывает тултип:
-   * подсветку отдельных линий не включаем.
-   */
-  if (IS_TOUCH) return;
-
   let rafId = null;
   let lastHoveredId = null;
 
@@ -2486,16 +2480,13 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
 
   // Расчёт приближения курсора к линиям на графике (допуск ~24px для лёгкого считывания)
   if (chartInstance.getZr) {
-    chartInstance.getZr().on("mousemove", (e) => {
+    const trackPointer = (x, y) => {
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
 
       rafId = requestAnimationFrame(() => {
         rafId = null;
-
-        const x = e.offsetX;
-        const y = e.offsetY;
 
         if (
           typeof chartInstance.containPixel === "function" &&
@@ -2609,9 +2600,33 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
           setActiveSeries(null);
         }
       });
+    };
+
+    chartInstance.getZr().on("mousemove", (e) => {
+      trackPointer(e.offsetX, e.offsetY);
     });
 
+    /*
+     * Тач-экран: палец ведёт себя как курсор. Касание/движение пальца
+     * по графику выбирает ближайшую линию, подсветка остаётся, пока
+     * виден тултип (сбрасывается при его скрытии — событие hideTip).
+     */
+    if (IS_TOUCH) {
+      const onTouch = (event) => {
+        const touch = event.touches && event.touches[0];
+        if (!touch) return;
+
+        const rect = chartElement.getBoundingClientRect();
+        trackPointer(touch.clientX - rect.left, touch.clientY - rect.top);
+      };
+
+      chartElement.addEventListener("touchstart", onTouch, { passive: true });
+      chartElement.addEventListener("touchmove", onTouch, { passive: true });
+    }
+
     chartInstance.getZr().on("globalout", () => {
+      /* На тач-экране после отпускания пальца тултип остаётся. */
+      if (IS_TOUCH) return;
       if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -2621,6 +2636,7 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   }
 
   chartElement.addEventListener("mouseleave", () => {
+    if (IS_TOUCH) return;
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
