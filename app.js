@@ -60,25 +60,16 @@ const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
  * Ширины — оценка в пикселях для шрифта 12px: нужны только для того,
  * чтобы решить, какие годы между крайними подписями поместятся.
  */
-const X_EDGE_LABEL_PX = 46;   /* «сен 2026» */
-const X_YEAR_LABEL_PX = 28;   /* «2021» */
-const X_LABEL_GAP_PX = 10;    /* минимальный зазор между подписями */
-
-/* Размеры шрифтов подписей осей. */
-const X_LABEL_FONT_PX = 10;   /* годы / месяцы под графиком */
-const AXIS_FONT_PX = 10;      /* шкалы слева и справа */
+const X_EDGE_LABEL_PX = 56;   /* «сен 2026» */
+const X_YEAR_LABEL_PX = 32;   /* «2021» */
+const X_LABEL_GAP_PX = 12;    /* минимальный зазор между подписями */
 const X_YEAR_STEPS = [1, 2, 5, 10];
 
 /* Пунктир «100%» — общий для основного графика и сезонности. */
 const BASELINE_COLOR = "#9EA0A5";
 
 /* Вертикальная сетка по годам. */
-const GRID_COLOR = "rgba(255,255,255,0.06)";
-const X_GRID_COLOR = GRID_COLOR;
-
-/* Сетка на слайдере сезонности: ярче и чуть толще обычной. */
-const SLIDER_GRID_COLOR = "rgba(255,255,255,0.28)";
-const SLIDER_GRID_WIDTH = 1.5;
+const X_GRID_COLOR = "#232B36";
 
 const GROUP_ORDER = [
   "Зарплаты",
@@ -384,7 +375,17 @@ function getGroupLabel(meta) {
 /*
  * Группа определяет поведение ряда при переключении валюты.
  */
+function isDealsSeries(meta) {
+  return !!meta && String(meta.key || "").includes("сделок");
+}
+
+
 function getInternalGroup(meta) {
+  /* Количество сделок — штуки: не деньги, валюту не меняем. */
+  if (isDealsSeries(meta)) {
+    return "other";
+  }
+
   const label = getGroupLabel(meta);
 
   switch (label) {
@@ -1099,6 +1100,11 @@ function formatValue(value, meta, percentMode = false) {
     return formatNumber(number, 3);
   }
 
+  /* Количество сделок: просто число, без единицы измерения. */
+  if (isDealsSeries(meta)) {
+    return formatNumber(number, 0);
+  }
+
   const unit = getDisplayUnit(meta);
 
   /*
@@ -1173,8 +1179,8 @@ function buildSeasonalityAverageHtml(monthName, validParams, meta) {
   if (percentMode) {
     valueText = formatPercentChange(average);
     const rounded = Math.round((average - 100) * 10) / 10;
-    if (rounded > 0) valueColor = "var(--up)";
-    if (rounded < 0) valueColor = "var(--down)";
+    if (rounded > 0) valueColor = "var(--c-rate)";
+    if (rounded < 0) valueColor = "var(--c-avg-minsk)";
   } else {
     valueText = formatValue(average, meta, false);
   }
@@ -1374,14 +1380,13 @@ function syncSeasonalityMonthState() {
     return;
   }
 
-  /* Между границами всегда остаётся минимум один месяц. */
   state.seasonalityMonthStart = Math.max(
     0,
-    Math.min(state.seasonalityMonthStart, max - SEASONALITY_MIN_SPAN)
+    Math.min(state.seasonalityMonthStart, max)
   );
 
   state.seasonalityMonthEnd = Math.max(
-    state.seasonalityMonthStart + SEASONALITY_MIN_SPAN,
+    state.seasonalityMonthStart,
     Math.min(state.seasonalityMonthEnd, max)
   );
 }
@@ -1482,9 +1487,20 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = meta.key;
         state.seasonalityYears = new Set(getSeasonalityYears(meta));
         state.seasonalityYearsInitialized = true;
-        state.seasonalityMonthStart = 0;
-        state.seasonalityMonthEnd = 11;
-        state.seasonalityMonthRangeInitialized = false;
+
+        /*
+         * Диапазон месяцев: если выбрано меньше 8 месяцев — он
+         * сохраняется при смене показателя; если 8 и больше —
+         * сбрасывается на все 12.
+         */
+        const selectedMonths =
+          state.seasonalityMonthEnd - state.seasonalityMonthStart + 1;
+
+        if (selectedMonths >= 8) {
+          state.seasonalityMonthStart = 0;
+          state.seasonalityMonthEnd = 11;
+          state.seasonalityMonthRangeInitialized = false;
+        }
 
         container
           .querySelectorAll('input[type="checkbox"]')
@@ -1497,9 +1513,7 @@ function buildSeasonalityCheckboxPanel() {
         state.seasonalityKey = null;
         state.seasonalityYears = new Set();
         state.seasonalityYearsInitialized = false;
-        state.seasonalityMonthStart = 0;
-        state.seasonalityMonthEnd = 11;
-        state.seasonalityMonthRangeInitialized = false;
+        /* Диапазон месяцев при снятии галочки не трогаем. */
       }
 
       buildSeasonalityYearsPanel();
@@ -1630,62 +1644,20 @@ function getSeasonalitySeries(meta) {
 }
 
 
-/*
- * Подпись деления шкалы. Число знаков после запятой одинаково у всех
- * делений оси (3,5 / 3,0 / 2,5), без разделителя тысяч (5000).
- */
-function countDecimals(value) {
-  const text = String(Number(Number(value).toFixed(6)));
-  const dot = text.indexOf(".");
-
-  return dot < 0 ? 0 : text.length - dot - 1;
-}
-
-
-function formatAxisTick(chartInstance, axisIndex, value, suffix = "") {
-  let decimals = countDecimals(value);
-
-  try {
-    const model = chartInstance && chartInstance.getModel();
-    const component = model && model.getComponent("yAxis", axisIndex);
-    const ticks = component && component.axis && component.axis.scale.getTicks();
-
-    if (Array.isArray(ticks) && ticks.length) {
-      decimals = Math.max(
-        ...ticks.map((tick) =>
-          countDecimals(tick && typeof tick === "object" ? tick.value : tick)
-        )
-      );
-    }
-  } catch (error) {
-    /* оставляем число знаков по самому значению */
-  }
-
-  decimals = Math.min(decimals, 3);
-
-  return Number(value).toLocaleString("ru-RU", {
-    useGrouping: false,
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  }) + suffix;
-}
-
-
 function buildSeasonalityYAxis(meta) {
   const percentMode = state.seasonalityMode === "percent";
 
   return {
     type: "value",
     position: "left",
+    name: percentMode ? "%" : (isRateSeries(meta) ? "BYN/USD" : getDisplayUnit(meta)),
+    nameTextStyle: { color: "#5B6673" },
     axisLabel: {
-      color: "#878787",
-      fontSize: AXIS_FONT_PX,
-      margin: 4,
-      formatter: (value) =>
-        formatAxisTick(seasonalityChart, 0, value, percentMode ? "%" : ""),
+      color: "#8A97A6",
+      formatter: (value) => formatValue(value, meta, percentMode),
     },
     axisLine: { show: false },
-    splitLine: { show: true, lineStyle: { color: GRID_COLOR } },
+    splitLine: { show: true, lineStyle: { color: "#161C24" } },
   };
 }
 
@@ -1745,6 +1717,7 @@ function buildSeasonalityTooltipFormatter(params) {
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
+        <span class="tt-bar" style="background:${color};"></span>
         <span class="tt-dot" style="background:${color};"></span>
         <span class="tt-name">${param.seriesName}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
@@ -1771,9 +1744,9 @@ function buildSeasonalityOption() {
     },
 
     grid: {
-      left: state.seasonalityMode === "percent" ? 31 : 27,
-      right: 8,
-      top: 16,
+      left: state.seasonalityMode === "percent" ? 34 : 38,
+      right: state.seasonalityMode === "percent" ? 34 : 38,
+      top: meta ? 30 : 20,
       bottom: 84,
       containLabel: false,
     },
@@ -1794,17 +1767,17 @@ function buildSeasonalityOption() {
         type: "cross",
         label: { color: "#000" },
       },
-      backgroundColor: "#181a1b",
-      borderColor: "rgba(255,255,255,0.12)",
+      backgroundColor: "#12181F",
+      borderColor: "#232B36",
       borderWidth: 1,
-      padding: [12, 16],
+      padding: 12,
       textStyle: {
-        color: "#ffffff",
-        fontSize: 13,
+        color: "#E8ECF1",
+        fontSize: 12,
       },
       extraCssText:
         "border-radius:8px;" +
-        "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
+        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
         "pointer-events:none;",
       formatter: buildSeasonalityTooltipFormatter,
     },
@@ -1814,12 +1787,11 @@ function buildSeasonalityOption() {
       data: months,
       boundaryGap: false,
       axisLabel: {
-        color: "#878787",
-        fontSize: X_LABEL_FONT_PX,
-        margin: 8,
+        color: "#8A97A6",
+        margin: 12,
       },
       axisLine: {
-        lineStyle: { color: "rgba(255,255,255,0.12)" },
+        lineStyle: { color: "#232B36" },
       },
       axisTick: { show: false },
 
@@ -1840,8 +1812,8 @@ function buildSeasonalityOption() {
       ? buildSeasonalityYAxis(meta)
       : {
           type: "value",
-          axisLabel: { color: "#878787" },
-          splitLine: { lineStyle: { color: GRID_COLOR } },
+          axisLabel: { color: "#8A97A6" },
+          splitLine: { lineStyle: { color: "#161C24" } },
         },
 
     dataZoom: buildSeasonalityDataZoom(),
@@ -1885,9 +1857,6 @@ function renderSeasonality() {
 
 const SEASONALITY_MAX_INDEX = 11;
 
-/* Минимальный зазор между границами таймлайна, в месяцах. */
-const SEASONALITY_MIN_SPAN = 1;
-
 
 function seasonalityIndexToPercent(index) {
   return (index / SEASONALITY_MAX_INDEX) * 100;
@@ -1909,76 +1878,86 @@ function buildSeasonalityDataZoom() {
   syncSeasonalityMonthState();
 
   /*
-   * Встроенный слайдер ECharts здесь только управляет видимым окном
-   * (show: false — сам он не рисуется и не реагирует на касания).
-   * Ручки и рамку рисуем сами (buildSeasonalitySliderGrid), чтобы
-   * границы двигались строго по месяцам: ручка «стопорится» на каждом
-   * месяце и не может встать между двумя.
+   * Самый простой слайдер: без inside-зума, без кастомных стилей.
+   * Границы задаём индексами месяцев (startValue / endValue), а не
+   * процентами, чтобы не было дрейфа из-за округления.
+   * Размеры — как у слайдера под основным графиком.
    */
   return [
     {
       type: "slider",
-      show: false,
       xAxisIndex: 0,
       startValue: state.seasonalityMonthStart,
       endValue: state.seasonalityMonthEnd,
       brushSelect: false,
+
+      /* Без мини-графика внутри слайдера. */
       showDataShadow: false,
+
+      /* График обновляется один раз, когда палец отпустил ручку. */
+      realtime: false,
+
+      /* Геометрия и вид — как у слайдера основного графика. */
+      left: 8,
+      right: 14,
+      bottom: 19,
+      height: 30,
+
+      borderColor: "#232B36",
+      backgroundColor: "transparent",
+      fillerColor: "rgba(61,220,132,0.10)",
+
+      handleStyle: {
+        color: "#1A222B",
+        borderColor: "#5B6673",
+      },
+      moveHandleStyle: {
+        color: "#2A3440",
+      },
+      emphasis: {
+        handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+        moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
+      },
+
+      textStyle: {
+        color: "#5B6673",
+        fontFamily: "var(--font-mono)",
+        fontSize: 11,
+      },
+
+      labelFormatter: (value, valueStr) => {
+        const month = getSeasonalityMonths()[Math.round(value)];
+        return month || valueStr;
+      },
     },
   ];
 }
 
 
 /*
- * Таймлайн сезонности: вертикальные линии по месяцам + своя рамка,
- * закрашенное окно, две ручки и подписи месяцев. Геометрия — как у
- * слайдера основного графика (left 8, right 14, bottom 19, height 30).
- * 12 месяцев равномерно по ширине дорожки.
+ * Вертикальные линии по месяцам на таймлайне (слайдере) сезонности.
+ * У слайдера ECharts нет собственной сетки, поэтому рисуем линии
+ * элементами graphic по геометрии слайдера (left 8, right 14,
+ * bottom 19, height 30). 12 месяцев равномерно по ширине дорожки.
  */
 const SEASONALITY_SLIDER = { left: 8, right: 14, bottom: 19, height: 30 };
 
-const SEASONALITY_HANDLE_W = 10;
-const SEASONALITY_HANDLE_H = 38;
-const SEASONALITY_HIT_TOLERANCE = 16;   /* px вокруг ручки, куда можно «попасть» */
-
-function getSeasonalitySliderGeometry() {
+function buildSeasonalitySliderGrid() {
   const width = seasonalityChart ? seasonalityChart.getWidth() : 0;
   const height = seasonalityChart ? seasonalityChart.getHeight() : 0;
 
   if (!width || !height) {
-    return null;
+    return [];
   }
 
   const track = width - SEASONALITY_SLIDER.left - SEASONALITY_SLIDER.right;
   const y2 = height - SEASONALITY_SLIDER.bottom;
   const y1 = y2 - SEASONALITY_SLIDER.height;
-
-  return {
-    width,
-    height,
-    track,
-    y1,
-    y2,
-    step: track / SEASONALITY_MAX_INDEX,
-    x: (index) =>
-      SEASONALITY_SLIDER.left + (index / SEASONALITY_MAX_INDEX) * track,
-  };
-}
-
-
-function buildSeasonalitySliderGrid() {
-  const geo = getSeasonalitySliderGeometry();
-
-  if (!geo) {
-    return [];
-  }
-
-  const { y1, y2, track } = geo;
   const elements = [];
 
   /* Крайние линии совпадают с рамкой слайдера — их не рисуем. */
   for (let i = 1; i < SEASONALITY_MAX_INDEX; i++) {
-    const x = geo.x(i);
+    const x = SEASONALITY_SLIDER.left + (i / SEASONALITY_MAX_INDEX) * track;
 
     elements.push({
       id: `seasonality-slider-grid-${i}`,
@@ -1986,273 +1965,11 @@ function buildSeasonalitySliderGrid() {
       silent: true,
       z: 1,
       shape: { x1: x, y1, x2: x, y2 },
-      style: { stroke: SLIDER_GRID_COLOR, lineWidth: SLIDER_GRID_WIDTH },
+      style: { stroke: X_GRID_COLOR, lineWidth: 1 },
     });
   }
-
-  const start = state.seasonalityMonthStart;
-  const end = state.seasonalityMonthEnd;
-  const xs = geo.x(start);
-  const xe = geo.x(end);
-  const centerY = (y1 + y2) / 2;
-  const months = getSeasonalityMonths();
-
-  /* Закрашенное окно между ручками. */
-  elements.push({
-    id: "seasonality-slider-filler",
-    type: "rect",
-    z: 2,
-    cursor: "grab",
-    shape: { x: xs, y: y1, width: Math.max(0, xe - xs), height: y2 - y1 },
-    style: { fill: "rgba(0,0,0,0.1)" },
-  });
-
-  /* Рамка дорожки. */
-  elements.push({
-    id: "seasonality-slider-border",
-    type: "rect",
-    silent: true,
-    z: 3,
-    shape: {
-      x: SEASONALITY_SLIDER.left,
-      y: y1,
-      width: track,
-      height: y2 - y1,
-    },
-    style: {
-      fill: "transparent",
-      stroke: "rgba(255,255,255,0.4)",
-      lineWidth: 1,
-    },
-  });
-
-  /* Две ручки: всегда стоят ровно на границе месяца. */
-  [["start", xs], ["end", xe]].forEach(([name, x]) => {
-    elements.push({
-      id: `seasonality-slider-handle-${name}`,
-      type: "rect",
-      z: 5,
-      cursor: "ew-resize",
-      x,
-      y: centerY,
-      shape: {
-        x: -SEASONALITY_HANDLE_W / 2,
-        y: -SEASONALITY_HANDLE_H / 2,
-        width: SEASONALITY_HANDLE_W,
-        height: SEASONALITY_HANDLE_H,
-        r: 3,
-      },
-      style: {
-        fill: "rgba(0,0,0,0.4)",
-        stroke: "rgba(255,255,255,0.9)",
-        lineWidth: 1.5,
-      },
-    });
-  });
-
-  /* Подписи месяцев под дорожкой (если ручки на одном месяце — одна). */
-  const clampLabelX = (x) => Math.max(16, Math.min(geo.width - 16, x));
-
-  [["start", xs, start, false], ["end", xe, end, start === end]].forEach(
-    ([name, x, index, hidden]) => {
-      elements.push({
-        id: `seasonality-slider-label-${name}`,
-        type: "text",
-        silent: true,
-        z: 5,
-        invisible: hidden,
-        x: clampLabelX(x),
-        y: y2 + 4,
-        style: {
-          text: months[index] || "",
-          fill: "#878787",
-          font: "11px ui-monospace, Menlo, Consolas, monospace",
-          align: "center",
-          verticalAlign: "top",
-        },
-      });
-    }
-  );
 
   return elements;
-}
-
-
-/*
- * Применить новое окно месяцев: состояние, видимая область графика,
- * положение ручек и (в процентном режиме) база 100%.
- */
-function applySeasonalityRange(start, end) {
-  if (!seasonalityChart) return;
-
-  start = Math.max(
-    0,
-    Math.min(SEASONALITY_MAX_INDEX - SEASONALITY_MIN_SPAN, start)
-  );
-  end = Math.max(
-    start + SEASONALITY_MIN_SPAN,
-    Math.min(SEASONALITY_MAX_INDEX, end)
-  );
-
-  if (
-    start === state.seasonalityMonthStart &&
-    end === state.seasonalityMonthEnd
-  ) {
-    return;
-  }
-
-  state.seasonalityMonthStart = start;
-  state.seasonalityMonthEnd = end;
-  state.seasonalityMonthRangeInitialized = true;
-
-  seasonalityChart.dispatchAction({
-    type: "dataZoom",
-    dataZoomIndex: 0,
-    startValue: start,
-    endValue: end,
-  });
-
-  seasonalityChart.setOption({ graphic: buildSeasonalitySliderGrid() });
-
-  if (state.seasonalityMode === "percent") {
-    const meta = metaByKey(state.seasonalityKey);
-
-    if (meta) {
-      seasonalityChart.setOption({ series: getSeasonalitySeries(meta) });
-    }
-  }
-}
-
-
-/*
- * Перетаскивание ручек. Положение курсора каждый раз переводим в
- * ближайший месяц, поэтому ручка шагает по месяцам и не бывает
- * «между» ними. Слушатели на window — чтобы перетаскивание не
- * обрывалось, когда курсор/палец ушёл за пределы графика.
- */
-function wireSeasonalitySlider() {
-  if (!seasonalityChart) return;
-
-  const dom = seasonalityChart.getDom();
-  let drag = null;
-
-  const pointOf = (event) => {
-    const touch =
-      (event.touches && event.touches[0]) ||
-      (event.changedTouches && event.changedTouches[0]) ||
-      event;
-    const rect = dom.getBoundingClientRect();
-
-    return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
-  };
-
-  const indexAt = (x, geo) =>
-    Math.max(
-      0,
-      Math.min(
-        SEASONALITY_MAX_INDEX,
-        Math.round((x - SEASONALITY_SLIDER.left) / geo.step)
-      )
-    );
-
-  const detect = (point, geo) => {
-    const margin = SEASONALITY_HIT_TOLERANCE;
-
-    if (point.y < geo.y1 - margin || point.y > geo.y2 + margin) {
-      return null;
-    }
-
-    const start = state.seasonalityMonthStart;
-    const end = state.seasonalityMonthEnd;
-    const xs = geo.x(start);
-    const xe = geo.x(end);
-    const ds = Math.abs(point.x - xs);
-    const de = Math.abs(point.x - xe);
-
-    if (ds <= margin || de <= margin) {
-      if (start === end) return "pending";
-      return ds <= de ? "start" : "end";
-    }
-
-    if (point.x > xs && point.x < xe) return "move";
-
-    return null;
-  };
-
-  const onMove = (event) => {
-    if (!drag) return;
-
-    if (event.cancelable) event.preventDefault();
-
-    const geo = getSeasonalitySliderGeometry();
-    if (!geo) return;
-
-    const index = indexAt(pointOf(event).x, geo);
-    let { mode } = drag;
-    let start = drag.start;
-    let end = drag.end;
-
-    if (mode === "pending") {
-      if (index === drag.start) return;
-      mode = index < drag.start ? "start" : "end";
-      drag.mode = mode;
-    }
-
-    if (mode === "start") {
-      start = Math.min(index, drag.end - SEASONALITY_MIN_SPAN);
-    } else if (mode === "end") {
-      end = Math.max(index, drag.start + SEASONALITY_MIN_SPAN);
-    } else {
-      const span = drag.end - drag.start;
-      start = Math.max(
-        0,
-        Math.min(SEASONALITY_MAX_INDEX - span, drag.start + index - drag.grab)
-      );
-      end = start + span;
-    }
-
-    applySeasonalityRange(start, end);
-  };
-
-  const onUp = () => {
-    drag = null;
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-    window.removeEventListener("touchmove", onMove);
-    window.removeEventListener("touchend", onUp);
-    window.removeEventListener("touchcancel", onUp);
-  };
-
-  const onDown = (event) => {
-    if (event.type === "mousedown" && event.button !== 0) return;
-
-    const geo = getSeasonalitySliderGeometry();
-    if (!geo) return;
-
-    const point = pointOf(event);
-    const mode = detect(point, geo);
-
-    if (!mode) return;
-
-    /* Не даём странице прокручиваться / выделять текст при перетаскивании. */
-    if (event.cancelable) event.preventDefault();
-
-    drag = {
-      mode,
-      start: state.seasonalityMonthStart,
-      end: state.seasonalityMonthEnd,
-      grab: indexAt(point.x, geo),
-    };
-
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    window.addEventListener("touchmove", onMove, { passive: false });
-    window.addEventListener("touchend", onUp);
-    window.addEventListener("touchcancel", onUp);
-  };
-
-  dom.addEventListener("mousedown", onDown);
-  dom.addEventListener("touchstart", onDown, { passive: false });
 }
 
 
@@ -2428,6 +2145,12 @@ function updateTooltipHighlight(chartContainer, activeSeriesId) {
 function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   if (!chartInstance || !chartElement) return;
 
+  /*
+   * На тач-экране касание графика только показывает тултип:
+   * подсветку отдельных линий не включаем.
+   */
+  if (IS_TOUCH) return;
+
   let rafId = null;
   let lastHoveredId = null;
 
@@ -2480,13 +2203,16 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
 
   // Расчёт приближения курсора к линиям на графике (допуск ~24px для лёгкого считывания)
   if (chartInstance.getZr) {
-    const trackPointer = (x, y) => {
+    chartInstance.getZr().on("mousemove", (e) => {
       if (rafId) {
         cancelAnimationFrame(rafId);
       }
 
       rafId = requestAnimationFrame(() => {
         rafId = null;
+
+        const x = e.offsetX;
+        const y = e.offsetY;
 
         if (
           typeof chartInstance.containPixel === "function" &&
@@ -2524,7 +2250,6 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
 
         option.series.forEach((seriesItem, sIdx) => {
           if (!seriesItem || !Array.isArray(seriesItem.data)) return;
-          if (seriesItem.id === ZOOM_SHADOW_ID) return;
 
           const data = seriesItem.data;
           const len = data.length;
@@ -2600,33 +2325,9 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
           setActiveSeries(null);
         }
       });
-    };
-
-    chartInstance.getZr().on("mousemove", (e) => {
-      trackPointer(e.offsetX, e.offsetY);
     });
 
-    /*
-     * Тач-экран: палец ведёт себя как курсор. Касание/движение пальца
-     * по графику выбирает ближайшую линию, подсветка остаётся, пока
-     * виден тултип (сбрасывается при его скрытии — событие hideTip).
-     */
-    if (IS_TOUCH) {
-      const onTouch = (event) => {
-        const touch = event.touches && event.touches[0];
-        if (!touch) return;
-
-        const rect = chartElement.getBoundingClientRect();
-        trackPointer(touch.clientX - rect.left, touch.clientY - rect.top);
-      };
-
-      chartElement.addEventListener("touchstart", onTouch, { passive: true });
-      chartElement.addEventListener("touchmove", onTouch, { passive: true });
-    }
-
     chartInstance.getZr().on("globalout", () => {
-      /* На тач-экране после отпускания пальца тултип остаётся. */
-      if (IS_TOUCH) return;
       if (rafId) {
         cancelAnimationFrame(rafId);
         rafId = null;
@@ -2636,7 +2337,6 @@ function attachLineHoverHighlight(chartInstance, chartElement, chartType) {
   }
 
   chartElement.addEventListener("mouseleave", () => {
-    if (IS_TOUCH) return;
     if (rafId) {
       cancelAnimationFrame(rafId);
       rafId = null;
@@ -2808,12 +2508,6 @@ function buildSeries() {
     result[0].markLine = buildBaselineMarkLine();
   }
 
-  const shadow = buildZoomShadowSeries(result);
-
-  if (shadow) {
-    result.unshift(shadow);
-  }
-
   return result;
 }
 
@@ -2836,12 +2530,8 @@ function getMonthIndex(month) {
 
 
 /* Отступ сетки слева/справа (одинаков для обеих сторон). */
-function getMainGridLeft() {
-  return state.mode === "percent" ? 31 : 27;
-}
-
-function getMainGridRight() {
-  return state.mode === "percent" ? 4 : 22;
+function getMainGridSide() {
+  return state.mode === "percent" ? 34 : 38;
 }
 
 
@@ -2909,7 +2599,7 @@ let xTickLayoutCache = null;
 function getXTickLayout() {
   const [start, end] = getLiveXWindow();
   const width = chart ? chart.getWidth() : 0;
-  const key = `${start}|${end}|${width}|${getMainGridLeft()}|${getMainGridRight()}`;
+  const key = `${start}|${end}|${width}|${getMainGridSide()}`;
 
   if (xTickLayoutCache && xTickLayoutCache.key === key) {
     return xTickLayoutCache;
@@ -2918,7 +2608,7 @@ function getXTickLayout() {
   const months = DATA.months;
   const gridWidth = Math.max(
     120,
-    (width || 800) - getMainGridLeft() - getMainGridRight()
+    (width || 800) - 2 * getMainGridSide()
   );
   const pxPerMonth = gridWidth / Math.max(1, end - start);
 
@@ -2988,7 +2678,7 @@ function formatXAxisLabel(value) {
 
   /* Промежуточные подписи — только год. */
   if (layout.labels.has(index)) {
-    return `{y|${value.slice(0, 4)}}`;
+    return value.slice(0, 4);
   }
 
   return "";
@@ -3023,38 +2713,42 @@ function buildBaselineMarkLine() {
    ============================================================ */
 
 function buildYAxes() {
-  const color = "#878787";
-  const left = getMainGridLeft();
-  const right = getMainGridRight();
-
-  const splitLine = {
-    show: true,
-    lineStyle: { color: GRID_COLOR },
-  };
+  const textSecondary = "#8A97A6";
+  const textTertiary = "#5B6673";
+  const splitColor = "#161C24";
 
   /*
-   * Процентный режим: одна ось.
+   * Процентный режим:
+   * одна ось.
    */
   if (state.mode === "percent") {
     return [
       {
         type: "value",
         position: "left",
+
         name: "%",
+
         nameTextStyle: {
-          color,
-          fontSize: AXIS_FONT_PX,
-          align: "left",
-          padding: [0, 0, 0, -left + 2],
+          color: textTertiary,
         },
+
         axisLabel: {
-          color,
-          fontSize: AXIS_FONT_PX,
-          margin: 4,
-          formatter: (value) => formatAxisTick(chart, 0, value, "%"),
+          color: textSecondary,
+          formatter: (value) => `${value}%`,
         },
-        splitLine,
-        axisLine: { show: false },
+
+        splitLine: {
+          show: true,
+
+          lineStyle: {
+            color: splitColor,
+          },
+        },
+
+        axisLine: {
+          show: false,
+        },
       },
     ];
   }
@@ -3065,58 +2759,85 @@ function buildYAxes() {
   return [
     {
       type: "value",
+
       position: "left",
+
       name: `Деньги, ${state.currency}`,
+
       nameTextStyle: {
-        color,
-        fontSize: AXIS_FONT_PX,
-        align: "left",
-        padding: [0, 0, 0, -left + 2],
+        color: textTertiary,
       },
+
       axisLabel: {
-        color,
-        fontSize: AXIS_FONT_PX,
-        margin: 4,
-        formatter: (value) => formatAxisTick(chart, 0, value),
+        color: textSecondary,
+
+        formatter: (value) => {
+          return Number(value).toLocaleString("ru-RU");
+        },
       },
 
       /* Подпись под курсором: целое число */
       axisPointer: {
         label: {
-          formatter: (params) => String(Math.round(Number(params.value))),
+          formatter: (params) => {
+            return String(Math.round(Number(params.value)));
+          },
         },
       },
 
-      splitLine,
-      axisLine: { show: false },
+      splitLine: {
+        show: true,
+
+        lineStyle: {
+          color: splitColor,
+        },
+      },
+
+      axisLine: {
+        show: false,
+      },
     },
 
     {
       type: "value",
+
       position: "right",
+
       name: "Ставки / курс",
+
       nameTextStyle: {
-        color,
-        fontSize: AXIS_FONT_PX,
-        align: "right",
-        padding: [0, -right + 2, 0, 0],
+        color: textTertiary,
       },
+
       axisLabel: {
-        color,
-        fontSize: AXIS_FONT_PX,
-        margin: 4,
-        formatter: (value) => formatAxisTick(chart, 1, value),
+        color: textSecondary,
+
+        formatter: (value) => {
+          return Number(value).toLocaleString(
+            "ru-RU",
+            {
+              maximumFractionDigits: 2,
+            }
+          );
+        },
       },
 
       /* Подпись под курсором: два знака после запятой */
       axisPointer: {
         label: {
-          formatter: (params) => Number(params.value).toFixed(2),
+          formatter: (params) => {
+            return Number(params.value).toFixed(2);
+          },
         },
       },
 
-      splitLine: { show: false },
-      axisLine: { show: false },
+      splitLine: {
+        show: false,
+      },
+
+      axisLine: {
+        show: false,
+      },
     },
   ];
 }
@@ -3197,6 +2918,7 @@ function buildTooltipFormatter(params) {
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
+        <span class="tt-bar" style="background:${color};"></span>
         <span class="tt-dot" style="background:${color};"></span>
         <span class="tt-name">${getSeriesLabel(meta)}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
@@ -3216,8 +2938,8 @@ function buildTooltipFormatter(params) {
 function buildOption() {
   const months = DATA.months;
 
-  const textSecondary = "#878787";
-  const textTertiary = "#878787";
+  const textSecondary = "#8A97A6";
+  const textTertiary = "#5B6673";
 
   return {
     backgroundColor: "transparent",
@@ -3229,8 +2951,8 @@ function buildOption() {
     },
 
     grid: {
-      left: getMainGridLeft(),
-      right: getMainGridRight(),
+      left: getMainGridSide(),
+      right: getMainGridSide(),
       top: 42,
       bottom: 84,
 
@@ -3259,21 +2981,21 @@ function buildOption() {
         },
       },
 
-      backgroundColor: "#181a1b",
+      backgroundColor: "#12181F",
 
-      borderColor: "rgba(255,255,255,0.12)",
+      borderColor: "#232B36",
       borderWidth: 1,
 
-      padding: [12, 16],
+      padding: 12,
 
       textStyle: {
-        color: "#ffffff",
-        fontSize: 13,
+        color: "#E8ECF1",
+        fontSize: 12,
       },
 
       extraCssText:
         "border-radius:8px;" +
-        "box-shadow:0 12px 32px -12px rgba(0,0,0,0.25);" +
+        "box-shadow:0 8px 24px rgba(0,0,0,0.35);" +
         "pointer-events:none;",
 
       formatter: buildTooltipFormatter,
@@ -3288,18 +3010,10 @@ function buildOption() {
 
       axisLabel: {
         color: textSecondary,
-        fontSize: X_LABEL_FONT_PX,
 
-        margin: 8,
+        margin: 12,
 
         hideOverlap: true,
-        rich: {
-          y: {
-            fontWeight: 700,
-            fontSize: X_LABEL_FONT_PX,
-            color: "#c6c6c6",
-          },
-        },
 
         /*
          * Подписи задаём явно: первый и последний месяц диапазона
@@ -3318,7 +3032,7 @@ function buildOption() {
 
       axisLine: {
         lineStyle: {
-          color: "rgba(255,255,255,0.12)",
+          color: "#232B36",
         },
       },
 
@@ -3357,8 +3071,8 @@ function buildOption() {
         /* Выделение нового диапазона протяжкой по слайдеру отключено. */
         brushSelect: false,
 
-        /* График обновляется прямо во время перетаскивания ручек. */
-        realtime: true,
+        /* График обновляется один раз, когда палец отпустил ручку. */
+        realtime: false,
 
         /* Геометрия DefiLlama */
         left: 8,
@@ -3366,7 +3080,31 @@ function buildOption() {
         bottom: 19,
         height: 30,
 
-        ...buildSliderStyle(true),
+        borderColor: "#232B36",
+        backgroundColor: "transparent",
+        fillerColor: "rgba(61,220,132,0.10)",
+
+        handleStyle: {
+          color: "#1A222B",
+          borderColor: "#5B6673",
+        },
+        moveHandleStyle: {
+          color: "#2A3440",
+        },
+        selectedDataBackground: {
+          lineStyle: { color: "rgba(232,236,241,0.65)", opacity: 1 },
+          areaStyle: { color: "rgba(232,236,241,0.2)", opacity: 1 },
+        },
+        emphasis: {
+          handleStyle: { borderColor: "#8A97A6", color: "#5B6673" },
+          moveHandleStyle: { borderColor: "#8A97A6", color: "#3A4654" },
+        },
+
+        textStyle: {
+          color: textTertiary,
+          fontFamily: "var(--font-mono)",
+          fontSize: 11,
+        },
 
         labelFormatter: (value, valueStr) => {
           const month = months[Math.round(value)];
@@ -3376,124 +3114,6 @@ function buildOption() {
     ],
 
     series: buildSeries(),
-  };
-}
-
-
-/* ============================================================
-   Стиль слайдера (общий для обоих графиков)
-   ============================================================ */
-
-const SLIDER_HANDLE_ICON =
-  "path://M-2,-10h4a3,3 0 0 1 3,3v14a3,3 0 0 1 -3,3h-4a3,3 0 0 1 -3,-3v-14a3,3 0 0 1 3,-3z";
-
-function buildSliderStyle(withShadow) {
-  return {
-    showDataShadow: withShadow,
-
-    borderColor: "rgba(255,255,255,0.4)",
-    backgroundColor: "transparent",
-    fillerColor: "rgba(0,0,0,0.1)",
-
-    handleIcon: SLIDER_HANDLE_ICON,
-    handleSize: "125%",
-    handleStyle: {
-      color: "rgba(0,0,0,0.4)",
-      borderColor: "rgba(255,255,255,0.9)",
-      borderWidth: 1.5,
-    },
-
-    /* «Гриппер» над выделенным окном. */
-    moveHandleSize: 8,
-    moveHandleStyle: {
-      color: "#5b5f63",
-      borderColor: "transparent",
-    },
-
-    dataBackground: {
-      lineStyle: { color: "rgba(255,255,255,0.35)", width: 1 },
-      areaStyle: { color: "rgba(255,255,255,0.08)" },
-    },
-    selectedDataBackground: {
-      lineStyle: { color: "rgba(255,255,255,0.75)", width: 1 },
-      areaStyle: { color: "rgba(255,255,255,0.18)" },
-    },
-
-    emphasis: {
-      handleStyle: { borderColor: "#ffffff", color: "rgba(255,255,255,0.2)" },
-      moveHandleStyle: { color: "#7d8185" },
-    },
-
-    textStyle: {
-      color: "#878787",
-      fontFamily: "var(--font-mono)",
-      fontSize: 11,
-    },
-  };
-}
-
-
-/* ============================================================
-   Мини-график внутри слайдера основного графика
-   ============================================================
-   ECharts рисует мини-график по ПЕРВОМУ ряду. Чтобы управлять тем,
-   какой ряд там виден, добавляем невидимый ряд-копию первым в список.
-   Он на той же оси Y, что и оригинал, поэтому масштаб осей не меняется.
-
-   Выбор: ряд с самой длинной историей среди выбранных.
-   Если выбрана средняя зарплата по Минску и она короче лидера не
-   более чем на 12 месяцев — берём её.
-   ============================================================ */
-
-const ZOOM_SHADOW_ID = "__zoom_shadow__";
-const ZOOM_SHADOW_PREFERRED_KEY = "средняя_средняя_минск";
-const ZOOM_SHADOW_TOLERANCE_MONTHS = 12;
-
-function buildZoomShadowSeries(seriesList) {
-  let best = null;
-  let preferred = null;
-
-  seriesList.forEach((item) => {
-    const data = item.data || [];
-    let first = -1;
-    let last = -1;
-
-    data.forEach((point, index) => {
-      if (point == null) return;
-      if (first < 0) first = index;
-      last = index;
-    });
-
-    if (first < 0) return;
-
-    const entry = { item, span: last - first };
-
-    if (!best || entry.span > best.span) best = entry;
-    if (item.id === ZOOM_SHADOW_PREFERRED_KEY) preferred = entry;
-  });
-
-  if (!best) return null;
-
-  const chosen =
-    preferred && preferred.span >= best.span - ZOOM_SHADOW_TOLERANCE_MONTHS
-      ? preferred
-      : best;
-
-  return {
-    id: ZOOM_SHADOW_ID,
-    type: "line",
-    data: chosen.item.data,
-    yAxisIndex: chosen.item.yAxisIndex,
-    connectNulls: true,
-    silent: true,
-    animation: false,
-    symbol: "none",
-    showSymbol: false,
-    lineStyle: { width: 0, opacity: 0 },
-    itemStyle: { opacity: 0 },
-    emphasis: { disabled: true },
-    tooltip: { show: false },
-    z: 0,
   };
 }
 
@@ -4362,7 +3982,6 @@ async function init() {
      */
     wireDataZoom();
     wireSeasonalityDataZoom();
-    wireSeasonalitySlider();
 
     /*
      * Responsive.
@@ -4430,7 +4049,7 @@ async function init() {
 
           <div style="
             margin-top:8px;
-            color:#878787;
+            color:#8A97A6;
             font-size:14px;
           ">
             ${String(error.message || error)}
@@ -4438,7 +4057,7 @@ async function init() {
 
           <div style="
             margin-top:12px;
-            color:#878787;
+            color:#5B6673;
             font-size:12px;
           ">
             Открой консоль браузера (F12 → Console),
