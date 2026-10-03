@@ -11,6 +11,8 @@
 
    В V1 список показателей НЕ прописан вручную.
    Он строится из series_meta, который формирует build_data.py.
+
+   События на первом графике — из data_events.json (build_events.py).
    ============================================================ */
 
 "use strict";
@@ -54,6 +56,22 @@ const MONTH_NAMES_RU = [
 const MONTH_SHORT_RU = MONTH_NAMES_RU.map((name) =>
   name.slice(0, 3).toLowerCase()
 );
+
+/* Месяцы в родительном падеже — для дат событий: «13 августа 2026». */
+const MONTH_GEN_RU = [
+  "января",
+  "февраля",
+  "марта",
+  "апреля",
+  "мая",
+  "июня",
+  "июля",
+  "августа",
+  "сентября",
+  "октября",
+  "ноября",
+  "декабря",
+];
 
 /*
  * Подписи оси X основного графика.
@@ -1157,8 +1175,15 @@ function formatPercentChange(value) {
   });
 
   if (change > 0) return `+${text}%`;
-  if (change < 0) return `\u2212${text}%`;
+  if (change < 0) return `−${text}%`;
   return `${text}%`;
+}
+
+
+/* Для курса USD год-аномалия не входит в среднее и показывается зачёркнутым. */
+function isSeasonalityExcluded(param) {
+  return state.seasonalityKey === RATE_KEY &&
+    isExcludedRateYear(param.seriesName);
 }
 
 
@@ -1166,13 +1191,15 @@ function formatPercentChange(value) {
  * HTML заголовка тултипа сезонности: «Октябрь среднее: +1,4%».
  */
 function buildSeasonalityAverageHtml(monthName, validParams, meta) {
-  const values = validParams.map((param) =>
-    Number(
-      param.value && typeof param.value === "object"
-        ? param.value.value
-        : param.value
-    )
-  );
+  const values = validParams
+    .filter((param) => !isSeasonalityExcluded(param))
+    .map((param) =>
+      Number(
+        param.value && typeof param.value === "object"
+          ? param.value.value
+          : param.value
+      )
+    );
 
   const average =
     values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -1756,7 +1783,7 @@ function buildSeasonalityTooltipFormatter(params) {
       : formatValue(value, meta, false);
 
     html += `
-      <div class="tt-row ${isActive ? "is-active" : ""}"
+      <div class="tt-row ${isActive ? "is-active" : ""} ${isSeasonalityExcluded(param) ? "is-excluded" : ""}"
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
@@ -2901,6 +2928,14 @@ function getMainGridRight() {
   return state.mode === "percent" ? 4 : 22;
 }
 
+/*
+ * Нижний отступ сетки. Если на графике есть события, под подписями
+ * оси X резервируем строку для их маркеров (EVENT_ROW_H).
+ */
+function getMainGridBottom() {
+  return 84 + (EVENTS.length ? EVENT_ROW_H : 0);
+}
+
 
 /*
  * Реальный видимый диапазон оси X (индексы месяцев).
@@ -3289,7 +3324,7 @@ function buildOption() {
       left: getMainGridLeft(),
       right: getMainGridRight(),
       top: 42,
-      bottom: 84,
+      bottom: getMainGridBottom(),
 
       containLabel: false,
     },
@@ -3658,6 +3693,364 @@ function buildZoomShadowSeries(seriesList) {
 
 
 /* ============================================================
+   События на первом графике (data_events.json)
+   ============================================================
+   data_events.json собирает build_events.py из events.xlsx. Маркеры —
+   обычные HTML-кнопки в слое #eventsLayer поверх графика: они
+   стоят в отдельной строке под подписями оси X и привязаны к
+   месяцу события, поэтому двигаются вместе с зумом.
+
+   Наведение (мышь) или касание/фокус (тач, клавиатура) показывает
+   пунктирную вертикальную линию и тултип с описанием.
+   ============================================================ */
+
+/* Лист events.xlsx, события которого рисуются на первом графике. */
+const EVENTS_SHEET = "медианная";
+
+const EVENT_COLOR_NAMES = new Set(["red", "green", "blue", "yellow"]);
+
+/* Высота строки маркеров под осью X, px. */
+const EVENT_ROW_H = 22;
+
+/* Расстояние от оси X до центра маркера, px. */
+const EVENT_CENTER_OFFSET = 34;
+
+/* Размер маркера (должен совпадать с .event-marker в style.css), px. */
+const EVENT_SIZE = 20;
+
+const EVENT_STAR_SVG =
+  '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+  '<path d="M12 2.6l2.9 6 6.6.9-4.8 4.6 1.2 6.5L12 17.4 6.1 20.6l1.2-6.5L2.5 9.5l6.6-.9z"></path>' +
+  "</svg>";
+
+let EVENTS = [];
+let eventItems = [];
+let activeEventItem = null;
+let eventsLayerEl = null;
+let eventLineEl = null;
+let eventTipEl = null;
+let eventsOutsideListenerAdded = false;
+
+
+/* «2026-08-13» -> «13 августа 2026». */
+function fmtEventDate(iso) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso));
+
+  if (!match) {
+    return String(iso);
+  }
+
+  const month = Number(match[2]);
+
+  if (month < 1 || month > 12) {
+    return String(iso);
+  }
+
+  return `${Number(match[3])} ${MONTH_GEN_RU[month - 1]} ${match[1]}`;
+}
+
+
+/*
+ * Загружает data_events.json. Файл необязательный: если его нет или он
+ * повреждён, сайт работает как раньше, без маркеров.
+ */
+async function loadEvents() {
+  try {
+    const response = await fetch("./data_events.json", {
+      cache: "no-cache",
+    });
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const json = await response.json();
+    const list = json && json.sheets && json.sheets[EVENTS_SHEET];
+
+    if (!Array.isArray(list)) {
+      return [];
+    }
+
+    return list.filter((ev) =>
+      ev &&
+      typeof ev.text === "string" &&
+      EVENT_COLOR_NAMES.has(ev.color) &&
+      getMonthIndex(ev.month) !== undefined
+    );
+  } catch (error) {
+    console.warn("data_events.json не загружен:", error);
+    return [];
+  }
+}
+
+
+function getMainGridRect() {
+  try {
+    const model = chart.getModel();
+    const grid = model.getComponent("grid", 0);
+    const rect = grid && grid.coordinateSystem && grid.coordinateSystem.getRect();
+
+    if (rect && Number.isFinite(rect.x) && Number.isFinite(rect.width)) {
+      return rect;
+    }
+  } catch (error) {
+    /* ниже — расчёт по параметрам сетки */
+  }
+
+  const left = getMainGridLeft();
+  const right = getMainGridRight();
+  const top = 42;
+  const bottom = getMainGridBottom();
+
+  return {
+    x: left,
+    y: top,
+    width: chart.getWidth() - left - right,
+    height: chart.getHeight() - top - bottom,
+  };
+}
+
+
+function hideEvent() {
+  if (activeEventItem) {
+    activeEventItem.el.classList.remove("is-active");
+  }
+
+  activeEventItem = null;
+
+  if (eventLineEl) eventLineEl.hidden = true;
+  if (eventTipEl) eventTipEl.hidden = true;
+}
+
+
+/* Пунктирная линия и тултип рядом с активным маркером. */
+function positionEventTip(item) {
+  if (!eventTipEl || !eventLineEl || !eventsLayerEl) {
+    return;
+  }
+
+  const rect = getMainGridRect();
+  const layerWidth = eventsLayerEl.clientWidth;
+
+  eventLineEl.style.left = `${item.x}px`;
+  eventLineEl.style.top = `${rect.y}px`;
+  eventLineEl.style.height =
+    `${Math.max(0, item.y - EVENT_SIZE / 2 - rect.y)}px`;
+
+  const tipWidth = eventTipEl.offsetWidth;
+  const tipHeight = eventTipEl.offsetHeight;
+  const gap = 12;
+
+  /* Тултип справа от линии; если не помещается — слева. */
+  let left = item.x + gap;
+
+  if (left + tipWidth > layerWidth - 4) {
+    left = item.x - gap - tipWidth;
+  }
+
+  left = Math.max(4, Math.min(layerWidth - tipWidth - 4, left));
+
+  /* Над строкой маркеров, внутри области графика. */
+  const top = Math.max(4, item.y - EVENT_SIZE / 2 - 8 - tipHeight);
+
+  eventTipEl.style.left = `${left}px`;
+  eventTipEl.style.top = `${top}px`;
+}
+
+
+function showEvent(item) {
+  if (!item || !item.visible || !eventTipEl || !eventLineEl) {
+    return;
+  }
+
+  if (activeEventItem && activeEventItem !== item) {
+    activeEventItem.el.classList.remove("is-active");
+  }
+
+  activeEventItem = item;
+  item.el.classList.add("is-active");
+
+  eventTipEl.innerHTML = "";
+
+  const dateEl = document.createElement("div");
+  dateEl.className = "event-tip-date";
+  dateEl.textContent = fmtEventDate(item.ev.date);
+
+  const textEl = document.createElement("div");
+  textEl.className = "event-tip-text";
+  textEl.textContent = item.ev.text;
+
+  eventTipEl.appendChild(dateEl);
+  eventTipEl.appendChild(textEl);
+
+  eventTipEl.hidden = false;
+  eventLineEl.hidden = false;
+
+  positionEventTip(item);
+}
+
+
+/*
+ * Ставит маркеры по текущему положению месяцев на оси X.
+ * Вызывается после каждой отрисовки, зума и изменения размера.
+ */
+function layoutEvents() {
+  if (!chart || !DATA || !eventItems.length) {
+    return;
+  }
+
+  const rect = getMainGridRect();
+  const centerY = rect.y + rect.height + EVENT_CENTER_OFFSET;
+
+  eventItems.forEach((item) => {
+    let x = null;
+
+    try {
+      const pixel = chart.convertToPixel(
+        { xAxisIndex: 0 },
+        DATA.months[item.index]
+      );
+
+      x = Array.isArray(pixel) ? pixel[0] : pixel;
+    } catch (error) {
+      x = null;
+    }
+
+    const visible =
+      Number.isFinite(x) &&
+      x >= rect.x - 0.5 &&
+      x <= rect.x + rect.width + 0.5;
+
+    item.visible = visible;
+    item.el.hidden = !visible;
+
+    if (visible) {
+      item.x = x;
+      item.y = centerY;
+      item.el.style.left = `${x}px`;
+      item.el.style.top = `${centerY}px`;
+    }
+  });
+
+  if (activeEventItem) {
+    if (activeEventItem.visible) {
+      positionEventTip(activeEventItem);
+    } else {
+      hideEvent();
+    }
+  }
+}
+
+
+function buildEventMarkers() {
+  eventsLayerEl = document.getElementById("eventsLayer");
+
+  if (!eventsLayerEl) {
+    return;
+  }
+
+  eventsLayerEl.innerHTML = "";
+  eventItems = [];
+  activeEventItem = null;
+
+  if (!EVENTS.length) {
+    return;
+  }
+
+  eventLineEl = document.createElement("div");
+  eventLineEl.className = "event-line";
+  eventLineEl.hidden = true;
+
+  eventTipEl = document.createElement("div");
+  eventTipEl.className = "event-tip";
+  eventTipEl.setAttribute("role", "tooltip");
+  eventTipEl.hidden = true;
+
+  eventsLayerEl.appendChild(eventLineEl);
+  eventsLayerEl.appendChild(eventTipEl);
+
+  /*
+   * Порядок в DOM = порядок наложения: важные события (приоритет 1)
+   * идут последними и лежат сверху, если маркеры стоят рядом.
+   * События без приоритета — внизу.
+   */
+  const sorted = EVENTS.slice().sort((a, b) =>
+    (b.priority ?? 99) - (a.priority ?? 99) ||
+    String(a.date).localeCompare(String(b.date))
+  );
+
+  sorted.forEach((ev) => {
+    const el = document.createElement("button");
+
+    el.type = "button";
+    el.className = `event-marker is-${ev.color}`;
+    el.setAttribute("aria-label", `${fmtEventDate(ev.date)}: ${ev.text}`);
+    el.innerHTML = EVENT_STAR_SVG;
+
+    const item = {
+      ev,
+      el,
+      index: getMonthIndex(ev.month),
+      x: 0,
+      y: 0,
+      visible: false,
+    };
+
+    /* Мышь: подсветка и тултип, пока курсор над маркером. */
+    el.addEventListener("pointerenter", (event) => {
+      if (event.pointerType === "mouse") showEvent(item);
+    });
+
+    el.addEventListener("pointerleave", (event) => {
+      if (event.pointerType === "mouse" && activeEventItem === item) {
+        hideEvent();
+      }
+    });
+
+    /* Тач: касание показывает тултип, повторное — скрывает. */
+    el.addEventListener("click", () => {
+      if (!IS_TOUCH) return;
+
+      if (activeEventItem === item) {
+        hideEvent();
+      } else {
+        showEvent(item);
+      }
+    });
+
+    /* Клавиатура: Tab на маркер показывает тултип. */
+    el.addEventListener("focus", () => {
+      if (el.matches(":focus-visible")) showEvent(item);
+    });
+
+    el.addEventListener("blur", () => {
+      if (activeEventItem === item) hideEvent();
+    });
+
+    eventsLayerEl.appendChild(el);
+    eventItems.push(item);
+  });
+
+  /* Касание или клик в любом другом месте закрывает тултип. */
+  if (!eventsOutsideListenerAdded) {
+    eventsOutsideListenerAdded = true;
+
+    document.addEventListener("pointerdown", (event) => {
+      if (!activeEventItem) return;
+
+      const target = event.target;
+
+      if (target && target.closest && target.closest(".event-marker")) {
+        return;
+      }
+
+      hideEvent();
+    });
+  }
+}
+
+
+/* ============================================================
    Рендер
    ============================================================ */
 
@@ -3680,6 +4073,7 @@ function render() {
   );
 
   updateMainSliderOverlay();
+  layoutEvents();
 }
 
 
@@ -4216,6 +4610,7 @@ function wireDataZoom() {
     state.zoomPreset = null;
     updateZoomPresetButtons();
     updateMainSliderOverlay();
+    layoutEvents();
 
     /*
      * В процентном режиме 100% зависит от левой границы. Обновляем только
@@ -4232,6 +4627,236 @@ function wireDataZoom() {
 }
 
 /* ============================================================
+   Верхние блоки (над графиками)
+   ============================================================ */
+
+const RATE_KEY = "курс_usd_курс_usd_byn";
+const MEDIAN_MINSK_KEY = "медианная_минск";
+
+/* Годы, исключаемые из среднего изменения курса USD (аномалия 2022). */
+const RATE_EXCLUDED_YEARS = [2022];
+
+function isExcludedRateYear(year) {
+  return RATE_EXCLUDED_YEARS.includes(Number(year));
+}
+
+function isNum(value) {
+  return value != null && Number.isFinite(Number(value));
+}
+
+
+/*
+ * Прогноз курса на следующий месяц по сезонности.
+ *
+ * Базовый месяц — прошлый календарный месяц; если по нему ещё нет
+ * данных, берём последний месяц, для которого курс есть.
+ * Для каждого прошлого года считаем изменение «базовый месяц ->
+ * следующий месяц», прогноз — среднее этих изменений
+ * (то же, что «среднее» в тултипе графика сезонности).
+ */
+function computeRateForecast() {
+  const values = DATA.series[RATE_KEY];
+
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey =
+    `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+
+  let baseIdx = DATA.months.indexOf(prevKey);
+
+  if (baseIdx < 0) {
+    baseIdx = DATA.months.length - 1;
+  }
+
+  while (baseIdx >= 0 && !isNum(values[baseIdx])) {
+    baseIdx--;
+  }
+
+  if (baseIdx < 0) {
+    return null;
+  }
+
+  const baseMonthNumber = Number(DATA.months[baseIdx].slice(5, 7));
+  const changes = [];
+
+  for (let i = 0; i < baseIdx; i++) {
+    if (Number(DATA.months[i].slice(5, 7)) !== baseMonthNumber) continue;
+    if (!isNum(values[i]) || !isNum(values[i + 1])) continue;
+    if (Number(values[i]) === 0) continue;
+
+    const year = Number(DATA.months[i].slice(0, 4));
+
+    changes.push({
+      label: baseMonthNumber === 12 ? `${year}→${year + 1}` : String(year),
+      year,
+      excluded: isExcludedRateYear(year),
+      pct: (Number(values[i + 1]) / Number(values[i]) - 1) * 100,
+    });
+  }
+
+  const counted = changes.filter((item) => !item.excluded);
+
+  if (!counted.length) {
+    return null;
+  }
+
+  const average =
+    counted.reduce((sum, item) => sum + item.pct, 0) / counted.length;
+
+  return {
+    baseMonth: DATA.months[baseIdx],
+    baseValue: Number(values[baseIdx]),
+    baseMonthNumber,
+    nextMonthNumber: baseMonthNumber % 12 + 1,
+    changes,
+    average,
+  };
+}
+
+
+/* Цвет для процента: зелёный / красный / без цвета. */
+function pctClass(pct) {
+  const rounded = Math.round(pct * 10) / 10;
+  return rounded > 0 ? "is-up" : rounded < 0 ? "is-down" : "";
+}
+
+
+function renderRateBlock() {
+  const forecast = computeRateForecast();
+  const valueEl = document.getElementById("rateValue");
+
+  if (!valueEl) return;
+
+  if (!forecast) {
+    valueEl.textContent = "—";
+    return;
+  }
+
+  valueEl.textContent = formatNumber(forecast.baseValue, 3);
+
+  document.getElementById("rateMonthLabel").textContent =
+    `за ${fmtMonthRu(forecast.baseMonth).toLowerCase()}`;
+
+  document.getElementById("rateForecastLabel").textContent =
+    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()}`;
+
+  const pctEl = document.getElementById("rateForecastPct");
+  pctEl.textContent = formatPercentChange(100 + forecast.average);
+  pctEl.className = `stat-delta ${pctClass(forecast.average)}`.trim();
+
+  /* Подсказка: изменения по годам. */
+  const tip = document.getElementById("rateInfoTip");
+  const firstYear = forecast.changes[0].year;
+
+  tip.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "info-tip-title";
+  title.textContent = `согласно статистике с ${firstYear} года:`;
+  tip.appendChild(title);
+
+  forecast.changes.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "info-tip-row" + (item.excluded ? " is-excluded" : "");
+
+    const name = document.createElement("span");
+    name.textContent = item.label;
+
+    const value = document.createElement("span");
+    value.className = pctClass(item.pct);
+    value.textContent = formatPercentChange(100 + item.pct);
+
+    row.appendChild(name);
+    row.appendChild(value);
+    tip.appendChild(row);
+  });
+
+  wireRateInfo();
+}
+
+
+let rateInfoWired = false;
+
+function wireRateInfo() {
+  if (rateInfoWired) return;
+
+  const wrap = document.getElementById("rateInfoWrap");
+  const button = document.getElementById("rateInfoBtn");
+  const tip = document.getElementById("rateInfoTip");
+
+  if (!wrap || !button || !tip) return;
+
+  rateInfoWired = true;
+
+  const show = () => {
+    tip.hidden = false;
+    button.classList.add("is-active");
+  };
+
+  const hide = () => {
+    tip.hidden = true;
+    button.classList.remove("is-active");
+  };
+
+  /* Мышь: подсказка, пока курсор над кнопкой. */
+  wrap.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse") show();
+  });
+
+  wrap.addEventListener("pointerleave", (event) => {
+    if (event.pointerType === "mouse") hide();
+  });
+
+  /* Тач: касание открывает, повторное — закрывает. */
+  button.addEventListener("click", () => {
+    if (!IS_TOUCH) return;
+    tip.hidden ? show() : hide();
+  });
+
+  /* Клавиатура. */
+  button.addEventListener("focus", () => {
+    if (button.matches(":focus-visible")) show();
+  });
+
+  button.addEventListener("blur", hide);
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!tip.hidden && !wrap.contains(event.target)) hide();
+  });
+}
+
+
+/* Блок 2: последняя известная медианная ЗП по Минску (временная версия). */
+function renderMedianBlock() {
+  const values = DATA.series[MEDIAN_MINSK_KEY];
+  const valueEl = document.getElementById("medianValue");
+
+  if (!Array.isArray(values) || !valueEl) return;
+
+  let idx = values.length - 1;
+
+  while (idx >= 0 && !isNum(values[idx])) idx--;
+
+  if (idx < 0) return;
+
+  valueEl.textContent = formatNumber(values[idx], 0);
+
+  document.getElementById("medianMonthLabel").textContent =
+    fmtMonthRu(DATA.months[idx]).toLowerCase();
+}
+
+
+function renderTopBlocks() {
+  renderRateBlock();
+  renderMedianBlock();
+}
+
+
+/* ============================================================
    Инициализация
    ============================================================ */
 
@@ -4240,6 +4865,13 @@ async function init() {
     resolveCssColors();
 
     DATA = await loadData();
+
+    /*
+     * События первого графика (data_events.json). Файл необязательный.
+     * Загружаем до первого рендера: от их наличия зависит нижний
+     * отступ сетки (строка маркеров под осью X).
+     */
+    EVENTS = await loadEvents();
 
     /*
      * Сначала создаём visibility state.
@@ -4392,10 +5024,23 @@ async function init() {
     buildSeasonalityCheckboxPanel();
 
     /*
+     * Маркеры событий первого графика (положение задаёт layoutEvents
+     * после отрисовки).
+     */
+    buildEventMarkers();
+
+    /* Верхние блоки над графиками. */
+    renderTopBlocks();
+
+    /*
      * Первый рендер.
      */
     render();
     renderSeasonality();
+
+    /* Любая перерисовка графика (зум, размер) — пересчёт маркеров. */
+    chart.on("finished", layoutEvents);
+    layoutEvents();
 
     /*
      * Подключение подсветки линий и соответствующих строк в тултипе.
@@ -4535,6 +5180,7 @@ async function init() {
         if (chart) {
           chart.resize();
           updateMainSliderOverlay();
+          layoutEvents();
         }
 
         if (seasonalityChart) {
@@ -4564,6 +5210,7 @@ async function init() {
           DATA.annual_series || {}
         ).length,
         metadata: DATA.series_meta.length,
+        events: EVENTS.length,
       }
     );
 

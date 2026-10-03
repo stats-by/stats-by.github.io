@@ -39,6 +39,12 @@
   --c-price-3k:       #7B7FE8;
   --c-price-4k:       #A66FE0;
 
+  /* маркеры событий: к — красный, з — зелёный, с — синий, ж — жёлтый */
+  --event-red:    #e24a42;
+  --event-green:  #3eb84f;
+  --event-blue:   #4b86db;
+  --event-yellow: #f2b84b;
+
   /* type */
   --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, "Liberation Mono", monospace;
@@ -534,6 +540,307 @@ input[type="checkbox"]:focus-visible {
 .tt-row.is-active .tt-val { font-weight: 700; }
 
 /* ============================================================
+   События на первом графике (маркеры под осью X)
+   ============================================================
+   Слой лежит поверх графика и сам не перехватывает мышь —
+   только маркеры (pointer-events: auto). Положение маркеров
+   считает app.js (layoutEvents) из позиции месяцев на оси.
+   ============================================================ */
+.chart-wrap {
+  position: relative;
+}
+
+.events-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.event-marker {
+  --ev: var(--event-blue);
+
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  appearance: none;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised-2);
+  border-color: color-mix(in srgb, var(--ev) 55%, transparent);
+  background: color-mix(in srgb, var(--ev) 24%, var(--bg-panel));
+  color: color-mix(in srgb, var(--ev) 60%, #ffffff);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.event-marker[hidden] { display: none; }
+
+/* Зона нажатия больше самого значка — удобно пальцем. */
+.event-marker::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.event-marker svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.event-marker.is-red    { --ev: var(--event-red); }
+.event-marker.is-green  { --ev: var(--event-green); }
+.event-marker.is-blue   { --ev: var(--event-blue); }
+.event-marker.is-yellow { --ev: var(--event-yellow); }
+
+/* Наведение: чуть крупнее и слегка подсвечен. */
+.event-marker:hover,
+.event-marker.is-active {
+  z-index: 3;
+  transform: translate(-50%, -50%) scale(1.12);
+  border-color: color-mix(in srgb, var(--ev) 85%, transparent);
+  background: color-mix(in srgb, var(--ev) 38%, var(--bg-panel));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ev) 16%, transparent),
+    0 0 10px color-mix(in srgb, var(--ev) 30%, transparent);
+}
+
+.event-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Пунктирная вертикальная линия при наведении на маркер. */
+.event-line {
+  position: absolute;
+  width: 0;
+  z-index: 1;
+  border-left: 1px dashed rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.event-line[hidden] { display: none; }
+
+/* Тултип события — в стиле тултипов графика. */
+.event-tip {
+  position: absolute;
+  z-index: 4;
+  width: max-content;
+  max-width: 260px;
+  padding: 12px 16px;
+  background: var(--bg-raised);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-ui);
+  pointer-events: none;
+}
+
+.event-tip[hidden] { display: none; }
+
+.event-tip-date {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.event-tip-text {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   Верхние блоки (над графиками)
+   ============================================================ */
+.top-blocks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 20px;
+}
+
+.stat-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.stat-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.stat-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.stat-forecast {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stat-forecast-label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.stat-forecast-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.stat-delta {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-delta.is-up { color: var(--up); }
+.stat-delta.is-down { color: var(--down); }
+
+.stat-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-height: 72px;
+  font-size: 14px;
+  color: var(--text-tertiary);
+}
+
+/* Круглая кнопка «i» и всплывающая подсказка */
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-btn {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.info-btn:hover,
+.info-btn.is-active {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.info-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.info-tip {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  left: -8px;
+  width: max-content;
+  max-width: 260px;
+  padding: 12px 16px;
+  background: var(--bg-raised);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.info-tip[hidden] { display: none; }
+
+.info-tip-title { margin-bottom: 8px; }
+
+.info-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.info-tip-row .is-up { color: var(--up); }
+.info-tip-row .is-down { color: var(--down); }
+
+/* Год, исключённый из среднего (курс USD, 2022). */
+.info-tip-row.is-excluded,
+.tt-row.is-excluded .tt-name,
+.tt-row.is-excluded .tt-val {
+  text-decoration: line-through;
+}
+
+@media (max-width: 900px) {
+  .top-blocks { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 28px; }
+}
+
+/* ============================================================
    Tablet / mobile
    ============================================================ */
 @media (max-width: 900px) {
@@ -594,6 +901,8 @@ input[type="checkbox"]:focus-visible {
 
   .controls-actions { gap: 4px; }
   .controls-actions .btn-clear { padding: 4px 8px; }
+
+  .event-tip { max-width: 220px; padding: 10px 12px; }
 }
 
 @media (max-width: 380px) {
