@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="income.css">
 <link rel="stylesheet" href="tax.css">
+<link rel="stylesheet" href="firstpayment.css">
 </head>
 <body>
 
@@ -174,6 +175,9 @@
 
   </main>
 
+  <!-- Блок «Первый взнос» (firstpayment.js, data.json) -->
+  <section class="chart-section fp-section" id="fpRoot" aria-label="Первый взнос"></section>
+
   <footer class="site-footer">
     <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Если за отдельный месяц нет данных, соседние доступные точки соединяются напрямую.</p>
     <p>Исходные данные по зарплатам и доходам — до вычета налогов. Режим «после вычета» — расчёт: вычитается взнос в ФСЗН 1% и подоходный налог 13% (итого × 0,8613), стандартные вычеты не учитываются.</p>
@@ -185,5 +189,6 @@
 <script src="app.js"></script>
 <script src="tax.js"></script>
 <script src="income.js"></script>
+<script src="firstpayment.js"></script>
 </body>
 </html>

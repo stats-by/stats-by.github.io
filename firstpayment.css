@@ -1,0 +1,63 @@
+/* ============================================================
+   Блок «Первый взнос»
+   ============================================================ */
+.fp-section { margin-top: 16px; }
+
+.fp-ctrl { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+
+.fp-row {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px;
+  font-size: 13px; color: var(--text-tertiary);
+}
+.fp-row > span:first-child { min-width: 92px; }
+
+.fp-in { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.fp-in input {
+  width: 64px; height: 32px; padding: 0 8px;
+  background: transparent; color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--r-md);
+  font: inherit; font-variant-numeric: tabular-nums;
+}
+.fp-in input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fp-hero { margin-bottom: 16px; }
+.fp-big {
+  font-size: 44px; font-weight: 600; line-height: 1.1; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.fp-sub { margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--text-tertiary); }
+
+.fp-cards {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--border-subtle); border-radius: var(--r-lg); overflow: hidden;
+}
+.fp-cards-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 16px; }
+.fp-card { padding: 14px 16px; border-left: 1px solid var(--border-subtle); min-width: 0; }
+.fp-card:first-child { border-left: 0; }
+.fp-label { font-size: 12px; color: var(--text-tertiary); }
+.fp-val { margin-top: 4px; font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fp-val small { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+.fp-val.is-blue { color: var(--link-on-chip); }
+.fp-val.is-amber { color: var(--event-yellow); }
+.fp-val.is-red { color: var(--down); }
+.fp-val.is-green { color: var(--up); }
+
+.fp-chart { margin-top: 16px; }
+.fp-bars {
+  display: flex; align-items: flex-end; gap: 1px; height: 180px;
+  border-bottom: 1px solid var(--border); border-top: 1px dashed var(--border-strong);
+}
+.fp-bars i { flex: 1 1 0; min-width: 1px; background: var(--accent); opacity: .85; border-radius: 1px 1px 0 0; }
+.fp-bars i.is-last { background: var(--up); opacity: 1; }
+.fp-axis { display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: var(--text-tertiary); }
+
+@media (max-width: 900px) {
+  .fp-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fp-card:nth-child(3) { border-left: 0; }
+  .fp-card:nth-child(n+3) { border-top: 1px solid var(--border-subtle); }
+  .fp-cards-3 { grid-template-columns: 1fr; }
+  .fp-cards-3 .fp-card { border-left: 0; border-top: 1px solid var(--border-subtle); }
+  .fp-cards-3 .fp-card:first-child { border-top: 0; }
+  .fp-big { font-size: 34px; }
+  .fp-row > span:first-child { min-width: 100%; }
+}
