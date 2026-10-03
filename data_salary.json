@@ -1,0 +1,622 @@
+{
+  "version": 1,
+  "source": "data распределение зарплат.xlsx",
+  "regions": {
+    "minsk": {
+      "name": "Минск",
+      "name_genitive": "Минска",
+      "period": {
+        "year": 2026,
+        "month": 5,
+        "month_name": "май",
+        "key": "2026-05",
+        "label": "май 2026"
+      },
+      "total": 602430,
+      "currency": "BYN",
+      "bins": [
+        {
+          "label": "<500",
+          "from": 0,
+          "to": 500,
+          "workers": 4371,
+          "share": 0.73,
+          "workers_from": 602430,
+          "share_from": 100.0
+        },
+        {
+          "label": "500…750",
+          "from": 500,
+          "to": 750,
+          "workers": 6720,
+          "share": 1.12,
+          "workers_from": 598059,
+          "share_from": 99.27
+        },
+        {
+          "label": "750…1000",
+          "from": 750,
+          "to": 1000,
+          "workers": 12829,
+          "share": 2.13,
+          "workers_from": 591339,
+          "share_from": 98.16
+        },
+        {
+          "label": "1000…1250",
+          "from": 1000,
+          "to": 1250,
+          "workers": 22626,
+          "share": 3.76,
+          "workers_from": 578510,
+          "share_from": 96.03
+        },
+        {
+          "label": "1250…1500",
+          "from": 1250,
+          "to": 1500,
+          "workers": 30414,
+          "share": 5.05,
+          "workers_from": 555884,
+          "share_from": 92.27
+        },
+        {
+          "label": "1500…1750",
+          "from": 1500,
+          "to": 1750,
+          "workers": 34583,
+          "share": 5.74,
+          "workers_from": 525470,
+          "share_from": 87.23
+        },
+        {
+          "label": "1750…2000",
+          "from": 1750,
+          "to": 2000,
+          "workers": 40528,
+          "share": 6.73,
+          "workers_from": 490887,
+          "share_from": 81.48
+        },
+        {
+          "label": "2000…2250",
+          "from": 2000,
+          "to": 2250,
+          "workers": 45037,
+          "share": 7.48,
+          "workers_from": 450359,
+          "share_from": 74.76
+        },
+        {
+          "label": "2250…2500",
+          "from": 2250,
+          "to": 2500,
+          "workers": 47003,
+          "share": 7.8,
+          "workers_from": 405322,
+          "share_from": 67.28
+        },
+        {
+          "label": "2500…2750",
+          "from": 2500,
+          "to": 2750,
+          "workers": 44877,
+          "share": 7.45,
+          "workers_from": 358319,
+          "share_from": 59.48
+        },
+        {
+          "label": "2750…3000",
+          "from": 2750,
+          "to": 3000,
+          "workers": 42410,
+          "share": 7.04,
+          "workers_from": 313442,
+          "share_from": 52.03
+        },
+        {
+          "label": "3000…3250",
+          "from": 3000,
+          "to": 3250,
+          "workers": 36838,
+          "share": 6.11,
+          "workers_from": 271032,
+          "share_from": 44.99
+        },
+        {
+          "label": "3250…3500",
+          "from": 3250,
+          "to": 3500,
+          "workers": 32827,
+          "share": 5.45,
+          "workers_from": 234194,
+          "share_from": 38.87
+        },
+        {
+          "label": "3500…3750",
+          "from": 3500,
+          "to": 3750,
+          "workers": 27632,
+          "share": 4.59,
+          "workers_from": 201367,
+          "share_from": 33.43
+        },
+        {
+          "label": "3750…4000",
+          "from": 3750,
+          "to": 4000,
+          "workers": 23368,
+          "share": 3.88,
+          "workers_from": 173735,
+          "share_from": 28.84
+        },
+        {
+          "label": "4000…4250",
+          "from": 4000,
+          "to": 4250,
+          "workers": 20390,
+          "share": 3.38,
+          "workers_from": 150367,
+          "share_from": 24.96
+        },
+        {
+          "label": "4250…4500",
+          "from": 4250,
+          "to": 4500,
+          "workers": 16653,
+          "share": 2.76,
+          "workers_from": 129977,
+          "share_from": 21.58
+        },
+        {
+          "label": "4500…5000",
+          "from": 4500,
+          "to": 5000,
+          "workers": 26057,
+          "share": 4.33,
+          "workers_from": 113324,
+          "share_from": 18.81
+        },
+        {
+          "label": "5000…5500",
+          "from": 5000,
+          "to": 5500,
+          "workers": 18100,
+          "share": 3.0,
+          "workers_from": 87267,
+          "share_from": 14.49
+        },
+        {
+          "label": "5500…6000",
+          "from": 5500,
+          "to": 6000,
+          "workers": 13060,
+          "share": 2.17,
+          "workers_from": 69167,
+          "share_from": 11.48
+        },
+        {
+          "label": "6000…6500",
+          "from": 6000,
+          "to": 6500,
+          "workers": 9597,
+          "share": 1.59,
+          "workers_from": 56107,
+          "share_from": 9.31
+        },
+        {
+          "label": "6500…7000",
+          "from": 6500,
+          "to": 7000,
+          "workers": 7381,
+          "share": 1.23,
+          "workers_from": 46510,
+          "share_from": 7.72
+        },
+        {
+          "label": "7000…7500",
+          "from": 7000,
+          "to": 7500,
+          "workers": 5695,
+          "share": 0.95,
+          "workers_from": 39129,
+          "share_from": 6.5
+        },
+        {
+          "label": "7500…8000",
+          "from": 7500,
+          "to": 8000,
+          "workers": 4566,
+          "share": 0.76,
+          "workers_from": 33434,
+          "share_from": 5.55
+        },
+        {
+          "label": "8000…9000",
+          "from": 8000,
+          "to": 9000,
+          "workers": 6821,
+          "share": 1.13,
+          "workers_from": 28868,
+          "share_from": 4.79
+        },
+        {
+          "label": "9000…10000",
+          "from": 9000,
+          "to": 10000,
+          "workers": 4844,
+          "share": 0.8,
+          "workers_from": 22047,
+          "share_from": 3.66
+        },
+        {
+          "label": "10000…11000",
+          "from": 10000,
+          "to": 11000,
+          "workers": 3554,
+          "share": 0.59,
+          "workers_from": 17203,
+          "share_from": 2.86
+        },
+        {
+          "label": "11000…12000",
+          "from": 11000,
+          "to": 12000,
+          "workers": 2793,
+          "share": 0.46,
+          "workers_from": 13649,
+          "share_from": 2.27
+        },
+        {
+          "label": ">12000",
+          "from": 12000,
+          "to": null,
+          "workers": 10856,
+          "share": 1.8,
+          "workers_from": 10856,
+          "share_from": 1.8
+        }
+      ],
+      "highlights": [
+        {
+          "percent": 90,
+          "threshold": 1250,
+          "share_from": 92.27,
+          "text": "Не менее 90% работников Минска зарабатывают от 1 250 BYN"
+        },
+        {
+          "percent": 75,
+          "threshold": 1750,
+          "share_from": 81.48,
+          "text": "Не менее 75% работников Минска зарабатывают от 1 750 BYN"
+        },
+        {
+          "percent": 50,
+          "threshold": 2750,
+          "share_from": 52.03,
+          "text": "Не менее 50% работников Минска зарабатывают от 2 750 BYN"
+        },
+        {
+          "percent": 25,
+          "threshold": 3750,
+          "share_from": 28.84,
+          "text": "Не менее 25% работников Минска зарабатывают от 3 750 BYN"
+        },
+        {
+          "percent": 10,
+          "threshold": 5500,
+          "share_from": 11.48,
+          "text": "Не менее 10% работников Минска зарабатывают от 5 500 BYN"
+        }
+      ]
+    },
+    "belarus": {
+      "name": "Беларусь",
+      "name_genitive": "Беларуси",
+      "period": {
+        "year": 2026,
+        "month": 5,
+        "month_name": "май",
+        "key": "2026-05",
+        "label": "май 2026"
+      },
+      "total": 2516670,
+      "currency": "BYN",
+      "bins": [
+        {
+          "label": "<500",
+          "from": 0,
+          "to": 500,
+          "workers": 20307,
+          "share": 0.81,
+          "workers_from": 2516670,
+          "share_from": 100.0
+        },
+        {
+          "label": "500…750",
+          "from": 500,
+          "to": 750,
+          "workers": 31314,
+          "share": 1.24,
+          "workers_from": 2496363,
+          "share_from": 99.19
+        },
+        {
+          "label": "750…1000",
+          "from": 750,
+          "to": 1000,
+          "workers": 104724,
+          "share": 4.16,
+          "workers_from": 2465049,
+          "share_from": 97.95
+        },
+        {
+          "label": "1000…1250",
+          "from": 1000,
+          "to": 1250,
+          "workers": 176356,
+          "share": 7.01,
+          "workers_from": 2360325,
+          "share_from": 93.79
+        },
+        {
+          "label": "1250…1500",
+          "from": 1250,
+          "to": 1500,
+          "workers": 202178,
+          "share": 8.03,
+          "workers_from": 2183969,
+          "share_from": 86.78
+        },
+        {
+          "label": "1500…1750",
+          "from": 1500,
+          "to": 1750,
+          "workers": 220833,
+          "share": 8.77,
+          "workers_from": 1981791,
+          "share_from": 78.75
+        },
+        {
+          "label": "1750…2000",
+          "from": 1750,
+          "to": 2000,
+          "workers": 230273,
+          "share": 9.15,
+          "workers_from": 1760958,
+          "share_from": 69.97
+        },
+        {
+          "label": "2000…2250",
+          "from": 2000,
+          "to": 2250,
+          "workers": 218618,
+          "share": 8.69,
+          "workers_from": 1530685,
+          "share_from": 60.82
+        },
+        {
+          "label": "2250…2500",
+          "from": 2250,
+          "to": 2500,
+          "workers": 206920,
+          "share": 8.22,
+          "workers_from": 1312067,
+          "share_from": 52.14
+        },
+        {
+          "label": "2500…2750",
+          "from": 2500,
+          "to": 2750,
+          "workers": 185439,
+          "share": 7.37,
+          "workers_from": 1105147,
+          "share_from": 43.91
+        },
+        {
+          "label": "2750…3000",
+          "from": 2750,
+          "to": 3000,
+          "workers": 161712,
+          "share": 6.43,
+          "workers_from": 919708,
+          "share_from": 36.54
+        },
+        {
+          "label": "3000…3250",
+          "from": 3000,
+          "to": 3250,
+          "workers": 134735,
+          "share": 5.35,
+          "workers_from": 757996,
+          "share_from": 30.12
+        },
+        {
+          "label": "3250…3500",
+          "from": 3250,
+          "to": 3500,
+          "workers": 113218,
+          "share": 4.5,
+          "workers_from": 623261,
+          "share_from": 24.77
+        },
+        {
+          "label": "3500…3750",
+          "from": 3500,
+          "to": 3750,
+          "workers": 90883,
+          "share": 3.61,
+          "workers_from": 510043,
+          "share_from": 20.27
+        },
+        {
+          "label": "3750…4000",
+          "from": 3750,
+          "to": 4000,
+          "workers": 71840,
+          "share": 2.85,
+          "workers_from": 419160,
+          "share_from": 16.66
+        },
+        {
+          "label": "4000…4250",
+          "from": 4000,
+          "to": 4250,
+          "workers": 58274,
+          "share": 2.32,
+          "workers_from": 347320,
+          "share_from": 13.8
+        },
+        {
+          "label": "4250…4500",
+          "from": 4250,
+          "to": 4500,
+          "workers": 46398,
+          "share": 1.84,
+          "workers_from": 289046,
+          "share_from": 11.49
+        },
+        {
+          "label": "4500…5000",
+          "from": 4500,
+          "to": 5000,
+          "workers": 67308,
+          "share": 2.67,
+          "workers_from": 242648,
+          "share_from": 9.64
+        },
+        {
+          "label": "5000…5500",
+          "from": 5000,
+          "to": 5500,
+          "workers": 43507,
+          "share": 1.73,
+          "workers_from": 175340,
+          "share_from": 6.97
+        },
+        {
+          "label": "5500…6000",
+          "from": 5500,
+          "to": 6000,
+          "workers": 30145,
+          "share": 1.2,
+          "workers_from": 131833,
+          "share_from": 5.24
+        },
+        {
+          "label": "6000…6500",
+          "from": 6000,
+          "to": 6500,
+          "workers": 20985,
+          "share": 0.83,
+          "workers_from": 101688,
+          "share_from": 4.04
+        },
+        {
+          "label": "6500…7000",
+          "from": 6500,
+          "to": 7000,
+          "workers": 15694,
+          "share": 0.62,
+          "workers_from": 80703,
+          "share_from": 3.21
+        },
+        {
+          "label": "7000…7500",
+          "from": 7000,
+          "to": 7500,
+          "workers": 11591,
+          "share": 0.46,
+          "workers_from": 65009,
+          "share_from": 2.58
+        },
+        {
+          "label": "7500…8000",
+          "from": 7500,
+          "to": 8000,
+          "workers": 8935,
+          "share": 0.36,
+          "workers_from": 53418,
+          "share_from": 2.12
+        },
+        {
+          "label": "8000…9000",
+          "from": 8000,
+          "to": 9000,
+          "workers": 12395,
+          "share": 0.49,
+          "workers_from": 44483,
+          "share_from": 1.77
+        },
+        {
+          "label": "9000…10000",
+          "from": 9000,
+          "to": 10000,
+          "workers": 8164,
+          "share": 0.32,
+          "workers_from": 32088,
+          "share_from": 1.28
+        },
+        {
+          "label": "10000…11000",
+          "from": 10000,
+          "to": 11000,
+          "workers": 5636,
+          "share": 0.22,
+          "workers_from": 23924,
+          "share_from": 0.95
+        },
+        {
+          "label": "11000…12000",
+          "from": 11000,
+          "to": 12000,
+          "workers": 4117,
+          "share": 0.16,
+          "workers_from": 18288,
+          "share_from": 0.73
+        },
+        {
+          "label": ">12000",
+          "from": 12000,
+          "to": null,
+          "workers": 14171,
+          "share": 0.56,
+          "workers_from": 14171,
+          "share_from": 0.56
+        }
+      ],
+      "highlights": [
+        {
+          "percent": 90,
+          "threshold": 1000,
+          "share_from": 93.79,
+          "text": "Не менее 90% работников Беларуси зарабатывают от 1 000 BYN"
+        },
+        {
+          "percent": 75,
+          "threshold": 1500,
+          "share_from": 78.75,
+          "text": "Не менее 75% работников Беларуси зарабатывают от 1 500 BYN"
+        },
+        {
+          "percent": 50,
+          "threshold": 2250,
+          "share_from": 52.14,
+          "text": "Не менее 50% работников Беларуси зарабатывают от 2 250 BYN"
+        },
+        {
+          "percent": 25,
+          "threshold": 3000,
+          "share_from": 30.12,
+          "text": "Не менее 25% работников Беларуси зарабатывают от 3 000 BYN"
+        },
+        {
+          "percent": 10,
+          "threshold": 4250,
+          "share_from": 11.49,
+          "text": "Не менее 10% работников Беларуси зарабатывают от 4 250 BYN"
+        }
+      ]
+    }
+  }
+}

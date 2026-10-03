@@ -12,7 +12,7 @@
    В V1 список показателей НЕ прописан вручную.
    Он строится из series_meta, который формирует build_data.py.
 
-   События на первом графике — из events.json (build_events.py).
+   События на первом графике — из data_events.json (build_events.py).
    ============================================================ */
 
 "use strict";
@@ -1180,17 +1180,26 @@ function formatPercentChange(value) {
 }
 
 
+/* Для курса USD год-аномалия не входит в среднее и показывается зачёркнутым. */
+function isSeasonalityExcluded(param) {
+  return state.seasonalityKey === RATE_KEY &&
+    isExcludedRateYear(param.seriesName);
+}
+
+
 /*
  * HTML заголовка тултипа сезонности: «Октябрь среднее: +1,4%».
  */
 function buildSeasonalityAverageHtml(monthName, validParams, meta) {
-  const values = validParams.map((param) =>
-    Number(
-      param.value && typeof param.value === "object"
-        ? param.value.value
-        : param.value
-    )
-  );
+  const values = validParams
+    .filter((param) => !isSeasonalityExcluded(param))
+    .map((param) =>
+      Number(
+        param.value && typeof param.value === "object"
+          ? param.value.value
+          : param.value
+      )
+    );
 
   const average =
     values.reduce((sum, value) => sum + value, 0) / values.length;
@@ -1774,7 +1783,7 @@ function buildSeasonalityTooltipFormatter(params) {
       : formatValue(value, meta, false);
 
     html += `
-      <div class="tt-row ${isActive ? "is-active" : ""}"
+      <div class="tt-row ${isActive ? "is-active" : ""} ${isSeasonalityExcluded(param) ? "is-excluded" : ""}"
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
@@ -3684,9 +3693,9 @@ function buildZoomShadowSeries(seriesList) {
 
 
 /* ============================================================
-   События на первом графике (events.json)
+   События на первом графике (data_events.json)
    ============================================================
-   events.json собирает build_events.py из events.xlsx. Маркеры —
+   data_events.json собирает build_events.py из events.xlsx. Маркеры —
    обычные HTML-кнопки в слое #eventsLayer поверх графика: они
    стоят в отдельной строке под подписями оси X и привязаны к
    месяцу события, поэтому двигаются вместе с зумом.
@@ -3742,12 +3751,12 @@ function fmtEventDate(iso) {
 
 
 /*
- * Загружает events.json. Файл необязательный: если его нет или он
+ * Загружает data_events.json. Файл необязательный: если его нет или он
  * повреждён, сайт работает как раньше, без маркеров.
  */
 async function loadEvents() {
   try {
-    const response = await fetch("./events.json", {
+    const response = await fetch("./data_events.json", {
       cache: "no-cache",
     });
 
@@ -3769,7 +3778,7 @@ async function loadEvents() {
       getMonthIndex(ev.month) !== undefined
     );
   } catch (error) {
-    console.warn("events.json не загружен:", error);
+    console.warn("data_events.json не загружен:", error);
     return [];
   }
 }
@@ -4618,6 +4627,236 @@ function wireDataZoom() {
 }
 
 /* ============================================================
+   Верхние блоки (над графиками)
+   ============================================================ */
+
+const RATE_KEY = "курс_usd_курс_usd_byn";
+const MEDIAN_MINSK_KEY = "медианная_минск";
+
+/* Годы, исключаемые из среднего изменения курса USD (аномалия 2022). */
+const RATE_EXCLUDED_YEARS = [2022];
+
+function isExcludedRateYear(year) {
+  return RATE_EXCLUDED_YEARS.includes(Number(year));
+}
+
+function isNum(value) {
+  return value != null && Number.isFinite(Number(value));
+}
+
+
+/*
+ * Прогноз курса на следующий месяц по сезонности.
+ *
+ * Базовый месяц — прошлый календарный месяц; если по нему ещё нет
+ * данных, берём последний месяц, для которого курс есть.
+ * Для каждого прошлого года считаем изменение «базовый месяц ->
+ * следующий месяц», прогноз — среднее этих изменений
+ * (то же, что «среднее» в тултипе графика сезонности).
+ */
+function computeRateForecast() {
+  const values = DATA.series[RATE_KEY];
+
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  const now = new Date();
+  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevKey =
+    `${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, "0")}`;
+
+  let baseIdx = DATA.months.indexOf(prevKey);
+
+  if (baseIdx < 0) {
+    baseIdx = DATA.months.length - 1;
+  }
+
+  while (baseIdx >= 0 && !isNum(values[baseIdx])) {
+    baseIdx--;
+  }
+
+  if (baseIdx < 0) {
+    return null;
+  }
+
+  const baseMonthNumber = Number(DATA.months[baseIdx].slice(5, 7));
+  const changes = [];
+
+  for (let i = 0; i < baseIdx; i++) {
+    if (Number(DATA.months[i].slice(5, 7)) !== baseMonthNumber) continue;
+    if (!isNum(values[i]) || !isNum(values[i + 1])) continue;
+    if (Number(values[i]) === 0) continue;
+
+    const year = Number(DATA.months[i].slice(0, 4));
+
+    changes.push({
+      label: baseMonthNumber === 12 ? `${year}→${year + 1}` : String(year),
+      year,
+      excluded: isExcludedRateYear(year),
+      pct: (Number(values[i + 1]) / Number(values[i]) - 1) * 100,
+    });
+  }
+
+  const counted = changes.filter((item) => !item.excluded);
+
+  if (!counted.length) {
+    return null;
+  }
+
+  const average =
+    counted.reduce((sum, item) => sum + item.pct, 0) / counted.length;
+
+  return {
+    baseMonth: DATA.months[baseIdx],
+    baseValue: Number(values[baseIdx]),
+    baseMonthNumber,
+    nextMonthNumber: baseMonthNumber % 12 + 1,
+    changes,
+    average,
+  };
+}
+
+
+/* Цвет для процента: зелёный / красный / без цвета. */
+function pctClass(pct) {
+  const rounded = Math.round(pct * 10) / 10;
+  return rounded > 0 ? "is-up" : rounded < 0 ? "is-down" : "";
+}
+
+
+function renderRateBlock() {
+  const forecast = computeRateForecast();
+  const valueEl = document.getElementById("rateValue");
+
+  if (!valueEl) return;
+
+  if (!forecast) {
+    valueEl.textContent = "—";
+    return;
+  }
+
+  valueEl.textContent = formatNumber(forecast.baseValue, 3);
+
+  document.getElementById("rateMonthLabel").textContent =
+    `за ${fmtMonthRu(forecast.baseMonth).toLowerCase()}`;
+
+  document.getElementById("rateForecastLabel").textContent =
+    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()}`;
+
+  const pctEl = document.getElementById("rateForecastPct");
+  pctEl.textContent = formatPercentChange(100 + forecast.average);
+  pctEl.className = `stat-delta ${pctClass(forecast.average)}`.trim();
+
+  /* Подсказка: изменения по годам. */
+  const tip = document.getElementById("rateInfoTip");
+  const firstYear = forecast.changes[0].year;
+
+  tip.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "info-tip-title";
+  title.textContent = `согласно статистике с ${firstYear} года:`;
+  tip.appendChild(title);
+
+  forecast.changes.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "info-tip-row" + (item.excluded ? " is-excluded" : "");
+
+    const name = document.createElement("span");
+    name.textContent = item.label;
+
+    const value = document.createElement("span");
+    value.className = pctClass(item.pct);
+    value.textContent = formatPercentChange(100 + item.pct);
+
+    row.appendChild(name);
+    row.appendChild(value);
+    tip.appendChild(row);
+  });
+
+  wireRateInfo();
+}
+
+
+let rateInfoWired = false;
+
+function wireRateInfo() {
+  if (rateInfoWired) return;
+
+  const wrap = document.getElementById("rateInfoWrap");
+  const button = document.getElementById("rateInfoBtn");
+  const tip = document.getElementById("rateInfoTip");
+
+  if (!wrap || !button || !tip) return;
+
+  rateInfoWired = true;
+
+  const show = () => {
+    tip.hidden = false;
+    button.classList.add("is-active");
+  };
+
+  const hide = () => {
+    tip.hidden = true;
+    button.classList.remove("is-active");
+  };
+
+  /* Мышь: подсказка, пока курсор над кнопкой. */
+  wrap.addEventListener("pointerenter", (event) => {
+    if (event.pointerType === "mouse") show();
+  });
+
+  wrap.addEventListener("pointerleave", (event) => {
+    if (event.pointerType === "mouse") hide();
+  });
+
+  /* Тач: касание открывает, повторное — закрывает. */
+  button.addEventListener("click", () => {
+    if (!IS_TOUCH) return;
+    tip.hidden ? show() : hide();
+  });
+
+  /* Клавиатура. */
+  button.addEventListener("focus", () => {
+    if (button.matches(":focus-visible")) show();
+  });
+
+  button.addEventListener("blur", hide);
+
+  document.addEventListener("pointerdown", (event) => {
+    if (!tip.hidden && !wrap.contains(event.target)) hide();
+  });
+}
+
+
+/* Блок 2: последняя известная медианная ЗП по Минску (временная версия). */
+function renderMedianBlock() {
+  const values = DATA.series[MEDIAN_MINSK_KEY];
+  const valueEl = document.getElementById("medianValue");
+
+  if (!Array.isArray(values) || !valueEl) return;
+
+  let idx = values.length - 1;
+
+  while (idx >= 0 && !isNum(values[idx])) idx--;
+
+  if (idx < 0) return;
+
+  valueEl.textContent = formatNumber(values[idx], 0);
+
+  document.getElementById("medianMonthLabel").textContent =
+    fmtMonthRu(DATA.months[idx]).toLowerCase();
+}
+
+
+function renderTopBlocks() {
+  renderRateBlock();
+  renderMedianBlock();
+}
+
+
+/* ============================================================
    Инициализация
    ============================================================ */
 
@@ -4628,7 +4867,7 @@ async function init() {
     DATA = await loadData();
 
     /*
-     * События первого графика (events.json). Файл необязательный.
+     * События первого графика (data_events.json). Файл необязательный.
      * Загружаем до первого рендера: от их наличия зависит нижний
      * отступ сетки (строка маркеров под осью X).
      */
@@ -4789,6 +5028,9 @@ async function init() {
      * после отрисовки).
      */
     buildEventMarkers();
+
+    /* Верхние блоки над графиками. */
+    renderTopBlocks();
 
     /*
      * Первый рендер.

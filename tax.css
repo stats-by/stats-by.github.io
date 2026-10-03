@@ -1,0 +1,24 @@
+/* ============================================================
+   Переключатель «до вычета / после вычета налогов»
+   ============================================================ */
+.tax-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+
+.tax-switch-label {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 520px) {
+  .tax-switch { margin-top: 12px; }
+  .tax-switch-label { width: 100%; text-align: center; }
+  .tax-switch .segmented { max-width: 100%; }
+  .tax-switch .segmented-btn { padding: 0 10px; font-size: 13px; }
+}

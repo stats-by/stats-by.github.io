@@ -7,6 +7,8 @@
 <meta name="description" content="Статистика экономических показателей Беларуси и Минска">
 <meta name="theme-color" content="#090b0c">
 <link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="income.css">
+<link rel="stylesheet" href="tax.css">
 </head>
 <body>
 
@@ -14,7 +16,64 @@
 
   <header class="site-header">
     <h1>Минск в цифрах</h1>
+
+    <!-- Общий переключатель налогов: влияет на все зарплаты на сайте (tax.js) -->
+    <div class="tax-switch">
+      <span class="tax-switch-label">Зарплаты и доходы:</span>
+      <div class="segmented" id="taxToggle" role="group" aria-label="Налоги">
+        <button type="button" class="segmented-btn" data-value="gross">До вычета налогов</button>
+        <button type="button" class="segmented-btn is-active" data-value="net">После вычета налогов</button>
+      </div>
+    </div>
   </header>
+
+  <section class="top-blocks" aria-label="Ключевые показатели">
+
+    <!-- Блок 1: курс доллара и прогноз по сезонности -->
+    <article class="stat-card" id="blockRate">
+      <h2 class="stat-title">Курс USD/BYN</h2>
+      <div class="stat-main">
+        <span class="stat-value" id="rateValue">—</span>
+        <span class="stat-unit">BYN</span>
+      </div>
+      <div class="stat-sub" id="rateMonthLabel"></div>
+
+      <div class="stat-forecast">
+        <div class="stat-forecast-label" id="rateForecastLabel">Прогноз</div>
+        <div class="stat-forecast-row">
+          <span class="stat-delta" id="rateForecastPct">—</span>
+          <span class="info-wrap" id="rateInfoWrap">
+            <button type="button" class="info-btn" id="rateInfoBtn" aria-label="Из чего считается прогноз" aria-describedby="rateInfoTip">i</button>
+            <div class="info-tip" id="rateInfoTip" role="tooltip" hidden></div>
+          </span>
+        </div>
+      </div>
+    </article>
+
+    <!-- Блок 2: медианная зарплата в Минске (временный, будет переделан) -->
+    <article class="stat-card" id="blockMedian">
+      <h2 class="stat-title">Медианная ЗП, Минск</h2>
+      <div class="stat-main">
+        <span class="stat-value" id="medianValue">—</span>
+        <span class="stat-unit">BYN</span>
+      </div>
+      <div class="stat-sub" id="medianMonthLabel"></div>
+    </article>
+
+    <!-- Блок 3: распределение доходов (income.js, data_salary.json) -->
+    <article class="stat-card" id="blockIncome">
+      <div class="stat-head">
+        <h2 class="stat-title">Распределение доходов</h2>
+        <div class="segmented segmented-sm" id="incomeRegionToggle" role="group" aria-label="Регион">
+          <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
+          <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>
+        </div>
+      </div>
+      <div class="income-period" id="incomePeriod"></div>
+      <div class="income-grid" id="incomeGrid"></div>
+    </article>
+
+  </section>
 
   <main class="dashboard">
 
@@ -117,11 +176,14 @@
 
   <footer class="site-footer">
     <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Если за отдельный месяц нет данных, соседние доступные точки соединяются напрямую.</p>
+    <p>Исходные данные по зарплатам и доходам — до вычета налогов. Режим «после вычета» — расчёт: вычитается взнос в ФСЗН 1% и подоходный налог 13% (итого × 0,8613), стандартные вычеты не учитываются.</p>
   </footer>
 
 </div>
 
 <script src="./echarts.min.js"></script>
 <script src="app.js"></script>
+<script src="tax.js"></script>
+<script src="income.js"></script>
 </body>
 </html>
