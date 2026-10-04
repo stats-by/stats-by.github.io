@@ -104,7 +104,7 @@
       rentByn: rentUsd.map(function (v, i) { return v == null || !rate[i] ? 0 : v * rate[i]; }),
       avg: avg, rentK: rentK, rentN: ratios2.length, firstTs: M[firstTs],
       k: k, kN: ratios.length, lastMedian: M[L],
-      ppm: ppm
+      ppm: ppm, rentUsdEnd: rentUsd[end]
     };
   }
 
@@ -247,7 +247,7 @@
           seg("fpSpread", [[0, "СР"], [1, "+1%"], [2, "+2%"], [3, "+3%"], [4, "+4%"]]) + "</div>" +
         '<div class="fp-row"><span>Жильё</span>' + seg("fpRent", [["0", "Своё"], ["1", "Аренда"]]) +
           seg("fpCheap", [["0", "Рыночная"], ["1", "Ниже рынка −20%"]]) + "</div>" +
-        '<div class="fp-row"><span>Кредит</span>' + seg("fpLoan", [["annuity", "Аннуитет"], ["diff", "Дифференц."]]) +
+        '<div class="fp-row"><span>Кредит</span>' + seg("fpLoan", [["annuity", "Аннуитет (равные платежи)"], ["diff", "Диф. (с уменьшением)"]]) +
           '<label class="fp-in">ставка <input type="number" id="fpRate" min="0" max="100" step="0.1" value="14.3">%</label>' +
           '<label class="fp-in">срок <input type="number" id="fpYears" min="1" max="40" step="1" value="25">лет</label></div>' +
       "</div>" +
@@ -313,6 +313,20 @@
     mark("fpHold", st.hold); mark("fpSpread", st.spread); mark("fpRent", st.rent ? "1" : "0");
     mark("fpCheap", st.cheap ? "1" : "0"); mark("fpWho", st.family ? "1" : "0"); mark("fpLoan", st.loan);
     mark("fpRooms", st.rooms); mark("fpIncome", st.income); mark("fpBpm", st.bpm);
+    /* Подписи кнопок со значениями, которые реально идут в расчёт (последний месяц). */
+    var people = st.family ? 2 : 1;
+    function lab(id, v, text) {
+      root.querySelectorAll("#" + id + " .segmented-btn").forEach(function (b) { if (b.dataset.v === String(v)) b.textContent = text; });
+    }
+    var minEnd = CFG.LIVING[Number(P.months[P.end].slice(0, 4))] || CFG.LIVING[2026];
+    [1, 2, 3].forEach(function (n) { lab("fpRooms", n, n + "-к (" + fmt(P.ppm[n - 1]) + " USD/м²)"); });
+    lab("fpIncome", "med", "Медианная ЗП (" + fmt(P.med[P.end] * CFG.TAX * people) + " BYN)");
+    lab("fpIncome", "avg", "Средняя ЗП (" + fmt(P.avg[P.end] * CFG.TAX * people) + " BYN)");
+    [1.5, 2, 2.5, 3].forEach(function (n) {
+      lab("fpBpm", n, String(n).replace(".", ",") + " БПМ (" + fmt(n * people * minEnd) + " BYN)");
+    });
+    lab("fpCheap", "0", "Рыночная (" + fmt(P.rentUsdEnd) + " USD)");
+    lab("fpCheap", "1", "Ниже рынка −" + CFG.RENT_DISCOUNT * 100 + "% (" + fmt(P.rentUsdEnd * (1 - CFG.RENT_DISCOUNT)) + " USD)");
     root.querySelector("#fpSpread").style.display = st.hold === "dep" ? "" : "none";
     root.querySelector("#fpCheap").style.display = st.rent ? "" : "none";
     root.querySelector("#fpTitle").textContent = "Первый взнос: " + st.rooms + "-комнатная квартира, " + fmt(st.area, st.area % 1 ? 1 : 0) + " м²";
@@ -345,7 +359,7 @@
           '<div class="fp-val">= ' + fmt(r.sav) + " <small>BYN</small> " + '<span class="fp-approx">≈ ' + fmt(r.sav / r.fx) + " USD</span></div></div>" +
         card("Уже накопил", m(r.total),
           "минимальный первоначальный взнос " + minPct + "%: " + m(CFG.MIN_DOWN * r.priceByn) + " " + u +
-          "<br>необходимо накопить, чтобы потянуть платёж по кредиту: " + m(r.down) + " " + u,
+          "<br><br>необходимо накопить, чтобы потянуть платёж по кредиту: " + m(r.down) + " " + u,
           "is-blue", u, usd ? "" : fmt(r.total / r.fx)) +
         '<div class="fp-card"><div class="fp-label">Кредит</div>' +
           '<div class="fp-sec"><div class="fp-sub">Сколько может потянуть платёж (доход − расходы, без аренды)</div><div class="fp-val">' +
