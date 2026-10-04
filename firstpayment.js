@@ -9,7 +9,8 @@
 
   /* ----- Настройки (все допущения — здесь) ----------------- */
   var CFG = {
-    AREA: { 1: 33, 2: 45, 3: 56, 4: 75 },  /* м² по умолчанию для 1–4 комнат (4-комн. — оценка, поправь) */
+    AREA: { 1: 33, 2: 50, 3: 65 },          /* м² по умолчанию для 1–3 комнат */
+    RENT_FROM: 2017, RENT_TO: 2025,    /* период сравнения Realt и t-s.by */
     RENT_DISCOUNT: 0.2,                /* «аренда ниже рынка» */
     TAX: (1 - 0.01) * (1 - 0.13),      /* всегда «после вычета»: ФСЗН 1% + подоходный 13% */
     MIN_DOWN: 0.2,                     /* минимальный первоначальный взнос — 20% цены */
@@ -24,13 +25,14 @@
       avg: "средняя_средняя_минск",
       rate: "курс_usd_курс_usd_byn",
       prices: ["realt_м2_стоимость_м2_однушек", "realt_м2_стоимость_м2_двушек",
-               "realt_м2_стоимость_м2_трешек", "realt_м2_стоимость_м2_четырешек"],
-      rent: "аренда_стоимость_аренды_realt",
+               "realt_м2_стоимость_м2_трешек"],
+      rentTs: "аренда_стоимость_аренды_t_s_by",      /* основной ряд аренды (однушка) */
+      rentRealt: "аренда_стоимость_аренды_realt",    /* только там, где нет t-s.by */
       refi: "ставка_реф_ставка_рефинансирования"
     }
   };
 
-  var st = { hold: "usd", spread: 2, rent: false, cheap: false, family: false,
+  var st = { hold: "usd", spread: 2, income: "med", bpm: 2, rent: false, cheap: false, family: false,
              rooms: 1, area: CFG.AREA[1], loan: "annuity", rate: 14.3, years: 25 };
   var P = null;
 
@@ -72,7 +74,16 @@
       return v != null ? v : CFG.RATE_STUB[Number(M[i].slice(0, 4))] || null;
     });
     var refi = fill(S[K.refi], end);
-    var rentUsd = fill(S[K.rent], end);
+    /* Аренда однушки: t-s.by; до его первой точки — Realt, уменьшенный на средний разрыв 2017–2025. */
+    var ts = S[K.rentTs], rl = S[K.rentRealt], ratios2 = [], firstTs = 0, i2;
+    M.forEach(function (mm, j) {
+      var y = Number(mm.slice(0, 4));
+      if (y >= CFG.RENT_FROM && y <= CFG.RENT_TO && num(ts[j]) != null && num(rl[j]) != null) ratios2.push(rl[j] / ts[j]);
+    });
+    var rentK = ratios2.reduce(function (a, b) { return a + b; }, 0) / (ratios2.length || 1) || 1;
+    while (firstTs < M.length && num(ts[firstTs]) == null) firstTs++;
+    var tsF = fill(ts, end), rlF = fill(rl, end);
+    var rentUsd = tsF.map(function (v, j) { return j >= firstTs ? v : rlF[j] == null ? null : rlF[j] / rentK; });
     var avg = fill(S[K.avg], end);
 
     /* Медиана: линейно между публикациями, дальше — средняя ЗП × коэффициент. */
@@ -91,6 +102,7 @@
     return {
       months: M, start: start, end: end, rate: rate, refi: refi, med: med,
       rentByn: rentUsd.map(function (v, i) { return v == null || !rate[i] ? 0 : v * rate[i]; }),
+      avg: avg, rentK: rentK, rentN: ratios2.length, firstTs: M[firstTs],
       k: k, kN: ratios.length, lastMedian: M[L],
       ppm: ppm
     };
@@ -100,11 +112,14 @@
   function calc(P, s) {
     var people = s.family ? 2 : 1, t, sav = [];
     function room(i) {    /* доход минус расходы, без аренды */
-      var min = CFG.LIVING[Number(P.months[i].slice(0, 4))] || CFG.LIVING[2026];
-      return P.med[i] * CFG.TAX * people - 2 * people * min;
+      var min = minAt(i);
+      return inc(i) - s.bpm * people * min;
     }
+    function inc(i) { return (s.income === "avg" ? P.avg[i] : P.med[i]) * CFG.TAX * people; }
+    function minAt(i) { return CFG.LIVING[Number(P.months[i].slice(0, 4))] || CFG.LIVING[2026]; }
+    function rentAt(i) { return s.rent ? P.rentByn[i] * (s.cheap ? 1 - CFG.RENT_DISCOUNT : 1) : 0; }
     for (t = P.start; t <= P.end; t++)
-      sav[t] = Math.max(0, room(t) - (s.rent ? P.rentByn[t] * (s.cheap ? 1 - CFG.RENT_DISCOUNT : 1) : 0));
+      sav[t] = Math.max(0, room(t) - rentAt(t));
 
     /* Платёж по кредиту = всё, что остаётся в последнем месяце + освободившаяся аренда. */
     var cap = Math.max(0, room(P.end));
@@ -139,7 +154,7 @@
 
     var pay0 = loan * f;
     var paid = s.loan === "annuity" ? pay0 * N : loan + loan * rm * (N + 1) / 2;
-    return { priceUsd: priceUsd, priceByn: priceByn, fx: fx, atMin: down <= CFG.MIN_DOWN * priceByn + 0.5, sav: sav[P.end], cap: cap, loan: loan, down: down, path: p, startMonth: P.months[m],
+    return { inc: inc(P.end), exp: s.bpm * people * minAt(P.end), rentEnd: rentAt(P.end), priceUsd: priceUsd, priceByn: priceByn, fx: fx, atMin: down <= CFG.MIN_DOWN * priceByn + 0.5, sav: sav[P.end], cap: cap, loan: loan, down: down, path: p, startMonth: P.months[m],
              months: months, found: found, total: total, extra: total - deposited,
              pay: pay0, interest: paid - loan, paid: paid };
   }
@@ -176,7 +191,7 @@
     var u = new URL(window.location.href), q = new URLSearchParams();
     q.set("g", "fp"); q.set("h", st.hold); q.set("s", st.spread);
     q.set("r", st.rent ? 1 : 0); q.set("d", st.cheap ? 1 : 0); q.set("w", st.family ? 1 : 0);
-    q.set("k", st.rooms); q.set("a", st.area);
+    q.set("k", st.rooms); q.set("a", st.area); q.set("i", st.income); q.set("b", st.bpm);
     q.set("l", st.loan); q.set("p", st.rate); q.set("y", st.years);
     u.search = q.toString(); u.hash = "";
     return u.toString();
@@ -190,8 +205,10 @@
     st.rent = q.get("r") === "1"; st.cheap = q.get("d") === "1"; st.family = q.get("w") === "1";
     if (["annuity", "diff"].indexOf(q.get("l")) >= 0) st.loan = q.get("l");
     var rm = Math.round(Number(q.get("k"))), ar = parseFloat(q.get("a"));
-    if (rm >= 1 && rm <= 4) { st.rooms = rm; st.area = CFG.AREA[rm]; }
+    if (rm >= 1 && rm <= 3) { st.rooms = rm; st.area = CFG.AREA[rm]; }
     if (isFinite(ar) && ar >= 10 && ar <= 300) st.area = ar;
+    if (["med", "avg"].indexOf(q.get("i")) >= 0) st.income = q.get("i");
+    if ([1.5, 2, 2.5, 3].indexOf(Number(q.get("b"))) >= 0) st.bpm = Number(q.get("b"));
     var rt = parseFloat(q.get("p")), yr = parseFloat(q.get("y"));
     if (isFinite(rt) && rt >= 0 && rt <= 100) st.rate = rt;
     if (isFinite(yr) && yr >= 1 && yr <= 40) st.years = yr;
@@ -221,13 +238,15 @@
       '<div class="chart-head"><h2 class="chart-title" id="fpTitle">Первый взнос</h2>' +
         '<button type="button" class="deep-link-button" id="fpShare" aria-label="Скопировать ссылку с текущими настройками" title="Скопировать ссылку">' + ICON_COPY + "</button></div>" +
       '<div class="fp-ctrl">' +
-        '<div class="fp-row"><span>Квартира</span>' + seg("fpRooms", [["1", "1 комн."], ["2", "2 комн."], ["3", "3 комн."], ["4", "4 комн."]]) +
+        '<div class="fp-row"><span>Квартира</span>' + seg("fpRooms", [["1", "1 комн."], ["2", "2 комн."], ["3", "3 комн."]]) +
           '<label class="fp-in">площадь <input type="number" id="fpArea" min="10" max="300" step="1">м²</label></div>' +
+        '<div class="fp-row"><span>Доход</span>' + seg("fpIncome", [["med", "Медианная ЗП"], ["avg", "Средняя ЗП"]]) + "</div>" +
+        '<div class="fp-row"><span>Расходы</span>' + seg("fpBpm", [["1.5", "1,5 БПМ"], ["2", "2 БПМ"], ["2.5", "2,5 БПМ"], ["3", "3 БПМ"]]) + "</div>" +
+        '<div class="fp-row"><span>Кто копит</span>' + seg("fpWho", [["0", "Один"], ["1", "Семья из двух"]]) + "</div>" +
         '<div class="fp-row"><span>Копил</span>' + seg("fpHold", [["pillow", "Под подушкой"], ["usd", "В долларах"], ["dep", "На вкладе"]]) +
           seg("fpSpread", [[0, "СР"], [1, "+1%"], [2, "+2%"], [3, "+3%"], [4, "+4%"]]) + "</div>" +
         '<div class="fp-row"><span>Жильё</span>' + seg("fpRent", [["0", "Своё"], ["1", "Аренда"]]) +
           seg("fpCheap", [["0", "Рыночная"], ["1", "Ниже рынка −20%"]]) + "</div>" +
-        '<div class="fp-row"><span>Кто копит</span>' + seg("fpWho", [["0", "Один"], ["1", "Семья из двух"]]) + "</div>" +
         '<div class="fp-row"><span>Кредит</span>' + seg("fpLoan", [["annuity", "Аннуитет"], ["diff", "Дифференц."]]) +
           '<label class="fp-in">ставка <input type="number" id="fpRate" min="0" max="100" step="0.1" value="14.3">%</label>' +
           '<label class="fp-in">срок <input type="number" id="fpYears" min="1" max="40" step="1" value="25">лет</label></div>' +
@@ -250,6 +269,8 @@
       st.rooms = Number(v); st.area = CFG.AREA[st.rooms];
       root.querySelector("#fpArea").value = st.area;
     });
+    bind("fpIncome", function (v) { st.income = v; });
+    bind("fpBpm", function (v) { st.bpm = Number(v); });
     bind("fpCheap", function (v) { st.cheap = v === "1"; });
     root.querySelector("#fpArea").addEventListener("input", function (e) {
       var v = parseFloat(String(e.target.value).replace(",", "."));
@@ -280,13 +301,17 @@
       '">' + value + " <small>" + (unit || "BYN") + "</small></div><div class=\"fp-sub\">" + sub + "</div></div>";
   }
 
+  function ln(label, v) {
+    return '<div class="fp-ln"><span>' + label + "</span><b>" + fmt(v) + " BYN</b></div>";
+  }
+
   function update() {
     var r = calc(P, st), usd = st.hold === "usd";
     var u = usd ? "USD" : "BYN", k = usd ? 1 / r.fx : 1;        /* в режиме «в долларах» цена, взнос и накопления — в $ */
     function m(v) { return fmt(v * k); }
     mark("fpHold", st.hold); mark("fpSpread", st.spread); mark("fpRent", st.rent ? "1" : "0");
     mark("fpCheap", st.cheap ? "1" : "0"); mark("fpWho", st.family ? "1" : "0"); mark("fpLoan", st.loan);
-    mark("fpRooms", st.rooms);
+    mark("fpRooms", st.rooms); mark("fpIncome", st.income); mark("fpBpm", st.bpm);
     root.querySelector("#fpSpread").style.display = st.hold === "dep" ? "" : "none";
     root.querySelector("#fpCheap").style.display = st.rent ? "" : "none";
     root.querySelector("#fpTitle").textContent = "Первый взнос: " + st.rooms + "-комнатная квартира, " + fmt(st.area, st.area % 1 ? 1 : 0) + " м²";
@@ -300,7 +325,7 @@
       big = "Копить дальше";
       sub = period + "накопил " + fmt(pct, 1) + "% от стоимости квартиры (" + m(r.total) + " " + u + ") — минимальный взнос есть, " +
         "но кредит на остальное он не потянул бы: нужен взнос " + fmt(r.down / r.priceByn * 100, 1) + "% (" + m(r.down) + " " + u + ")";
-    } else { big = span(r.months); sub = r.months + " мес., копить можно было начать с " + r.startMonth; }
+    } else { big = span(r.months); sub = r.months + " мес., копить нужно было начать с " + r.startMonth; }
 
     var bars = r.path.map(function (v, i) {
       var h = Math.min(100, v / (r.down || 1) * 100);
@@ -313,9 +338,11 @@
       '<div class="fp-hero"><div class="fp-big">' + big + '</div><div class="fp-sub">' + sub + "</div></div>" +
       '<div class="fp-cards">' +
         card("Цена квартиры", m(r.priceByn), (usd ? fmt(r.priceByn) + " BYN" : "$" + fmt(r.priceUsd)) + " · " + fmt(r.fx, 3) + " BYN/$", "", u) +
-        card("Первый взнос", m(r.down), fmt(r.down / r.priceByn * 100) + "% цены" + (r.atMin ? " (минимум)" : ""), "is-blue", u) +
-        card("Откладывать в месяц", fmt(r.sav), (st.rent ? "после аренды" : "доход минус расходы") + (usd ? " · ≈ $" + fmt(r.sav / r.fx) : "")) +
-        card(st.loan === "diff" ? "Первый платёж" : "Платёж по кредиту", fmt(r.pay), "до " + fmt(r.cap) + " в месяц доступно", "is-amber") +
+        '<div class="fp-card"><div class="fp-label">Откладывать в месяц</div><div class="fp-calc">' +
+          ln("Доход", r.inc) + ln("− Расходы", r.exp) + (st.rent ? ln("− Аренда", r.rentEnd) : "") + "</div>" +
+          '<div class="fp-val">= ' + fmt(r.sav) + " <small>BYN</small></div>" + '<div class="fp-sub">≈ $' + fmt(r.sav / r.fx) + "</div></div>" +
+        card("Уже накопил", m(r.total), "минимальный первоначальный взнос " + minPct + "%: " + m(CFG.MIN_DOWN * r.priceByn) + " " + u, "is-blue", u) +
+        card(st.loan === "diff" ? "Будущий первый платёж по кредиту" : "Будущий платёж по кредиту", fmt(r.pay), "доступно в месяц: " + fmt(r.cap), "is-amber") +
       "</div>" +
       (r.path.length ? '<div class="fp-chart"><div class="fp-bars">' + bars + '</div><div class="fp-axis"><span>' +
         r.startMonth + "</span><span>накоплено " + m(r.total) + " из " + m(r.down) + " " + u + "</span></div></div>" : "") +
@@ -325,13 +352,17 @@
         card(extraLabel, m(r.extra), "за время накопления", "is-green", u) +
       "</div>";
 
-    var roomWord = ["однокомнатных", "двухкомнатных", "трёхкомнатных", "четырёхкомнатных"][st.rooms - 1];
+    var roomWord = ["однокомнатных", "двухкомнатных", "трёхкомнатных"][st.rooms - 1];
+    var incomeText = st.income === "avg"
+      ? "средняя ЗП по Минску после вычета налогов"
+      : "медианная ЗП по Минску после вычета налогов (между майскими и ноябрьскими публикациями линейно, после последней, " + P.lastMedian +
+        ", — средняя ЗП × " + fmt(P.k, 3) + ": средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек)";
     root.querySelector("#fpNote").textContent =
-      "Расчёт на " + P.months[P.end] + " (последний месяц с ценами на квартиры). Доход — медианная ЗП по Минску после вычета налогов, " +
-      "между майскими и ноябрьскими публикациями линейно, после последней (" + P.lastMedian + ") — средняя ЗП × " + fmt(P.k, 3) +
-      " (средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек). Расходы — 2 прожиточных минимума на человека " +
-      "(временные значения по годам). Цена — средняя цена м² " + roomWord + " квартир Realt × площадь. Аренда — ряд Realt, одна цена для всех размеров" +
-      (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + ". Взнос подобран так, чтобы платёж по кредиту " +
+      "Расчёт на " + P.months[P.end] + " (последний месяц с ценами на квартиры). Доход — " + incomeText + ". Расходы — " +
+      fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (БПМ — временные значения по годам). Цена — средняя цена м² " + roomWord + " квартир Realt × площадь. " +
+      "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + P.firstTs +
+      ", где их нет, — данные Realt, уменьшенные в " + fmt(P.rentK, 2) + " раза (средний разрыв Realt и t-s.by в " + CFG.RENT_FROM + "–" + CFG.RENT_TO + ", " +
+      P.rentN + " месяцев). Взнос подобран так, чтобы платёж по кредиту " +
       "не превышал того, что человек откладывал в последнем месяце (плюс освободившаяся аренда), но не меньше " + minPct + "% цены. " +
       "История — с первой публикации медианной ЗП по Минску (" + P.months[P.start] + "). Курс USD до 2016 года — приблизительный. Вклад без налога, ставка = ставка " +
       "рефинансирования месяца (СР) + надбавка, ежемесячная капитализация. Без учёта инфляции и роста цен на жильё.";

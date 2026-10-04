@@ -42,6 +42,11 @@
 .fp-val.is-red { color: var(--down); }
 .fp-val.is-green { color: var(--up); }
 
+.fp-calc { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-secondary); }
+.fp-ln { display: flex; justify-content: space-between; gap: 8px; font-variant-numeric: tabular-nums; }
+.fp-ln b { font-weight: 500; color: var(--text-primary); }
+.fp-calc + .fp-val { padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--border-subtle); }
+
 .fp-chart { margin-top: 16px; }
 .fp-bars {
   display: flex; align-items: flex-end; gap: 1px; height: 180px;
