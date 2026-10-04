@@ -24,8 +24,8 @@
       median: "медианная_минск",
       avg: "средняя_средняя_минск",
       rate: "курс_usd_курс_usd_byn",
-      prices: ["realt_м2_стоимость_м2_однушек", "realt_м2_стоимость_м2_двушек",
-               "realt_м2_стоимость_м2_трешек"],
+      prices: ["wikidom_м2_стоимость_м2_однушек", "wikidom_м2_стоимость_м2_двушек",
+               "wikidom_м2_стоимость_м2_трешек"],   /* цена покупки м² — Wikidom */
       rentTs: "аренда_стоимость_аренды_t_s_by",      /* основной ряд аренды (однушка) */
       rentRealt: "аренда_стоимость_аренды_realt",    /* только там, где нет t-s.by */
       refi: "ставка_реф_ставка_рефинансирования"
@@ -329,7 +329,7 @@
     lab("fpCheap", "1", "Ниже рынка −" + CFG.RENT_DISCOUNT * 100 + "% (" + fmt(P.rentUsdEnd * (1 - CFG.RENT_DISCOUNT)) + " USD)");
     root.querySelector("#fpSpread").style.display = st.hold === "dep" ? "" : "none";
     root.querySelector("#fpCheap").style.display = st.rent ? "" : "none";
-    root.querySelector("#fpTitle").textContent = "Первый взнос: " + st.rooms + "-комнатная квартира, " + fmt(st.area, st.area % 1 ? 1 : 0) + " м²";
+    root.querySelector("#fpTitle").textContent = "Первый взнос: " + st.rooms + "-комнатный бабушатник, " + fmt(st.area, st.area % 1 ? 1 : 0) + " м²";
 
     var big, sub, pct = r.total / r.priceByn * 100, minPct = CFG.MIN_DOWN * 100;
     var period = "За последние " + span(r.months) + " (с " + r.startMonth + ") человек ";
@@ -357,7 +357,7 @@
         '<div class="fp-card"><div class="fp-label">Накопления в месяц</div><div class="fp-calc">' +
           ln("Доход", r.inc) + ln("− Расходы", r.exp) + (st.rent ? ln("− Аренда", r.rentEnd) : "") + "</div>" +
           '<div class="fp-val">= ' + fmt(r.sav) + " <small>BYN</small> " + '<span class="fp-approx">≈ ' + fmt(r.sav / r.fx) + " USD</span></div></div>" +
-        card("Уже накопил", m(r.total),
+        card(st.family ? "Уже накопили" : "Уже накопил", m(r.total),
           "минимальный первоначальный взнос " + minPct + "%: " + m(CFG.MIN_DOWN * r.priceByn) + " " + u +
           "<br><br>необходимо накопить, чтобы потянуть платёж по кредиту: " + m(r.down) + " " + u,
           "is-blue", u, usd ? "" : fmt(r.total / r.fx)) +
@@ -383,7 +383,7 @@
         ", — средняя ЗП × " + fmt(P.k, 3) + ": средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек)";
     root.querySelector("#fpNote").textContent =
       "Расчёт на " + P.months[P.end] + " (последний месяц с ценами на квартиры). Доход — " + incomeText + ". Расходы — " +
-      fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (БПМ — временные значения по годам). Цена — средняя цена м² " + roomWord + " квартир Realt × площадь. " +
+      fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (БПМ — временные значения по годам). Цена — средняя цена м² " + roomWord + " квартир Wikidom × площадь. " +
       "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + P.firstTs +
       ", где их нет, — данные Realt, уменьшенные в " + fmt(P.rentK, 2) + " раза (средний разрыв Realt и t-s.by в " + CFG.RENT_FROM + "–" + CFG.RENT_TO + ", " +
       P.rentN + " месяцев). Взнос подобран так, чтобы платёж по кредиту " +
