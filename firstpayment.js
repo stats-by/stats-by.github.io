@@ -154,7 +154,7 @@
 
     var pay0 = loan * f;
     var paid = s.loan === "annuity" ? pay0 * N : loan + loan * rm * (N + 1) / 2;
-    return { inc: inc(P.end), exp: s.bpm * people * minAt(P.end), rentEnd: rentAt(P.end), priceUsd: priceUsd, priceByn: priceByn, fx: fx, atMin: down <= CFG.MIN_DOWN * priceByn + 0.5, sav: sav[P.end], cap: cap, loan: loan, down: down, path: p, startMonth: P.months[m],
+    return { f: f, payNow: Math.max(0, priceByn - total) * f, inc: inc(P.end), exp: s.bpm * people * minAt(P.end), rentEnd: rentAt(P.end), priceUsd: priceUsd, priceByn: priceByn, fx: fx, atMin: down <= CFG.MIN_DOWN * priceByn + 0.5, sav: sav[P.end], cap: cap, loan: loan, down: down, path: p, startMonth: P.months[m],
              months: months, found: found, total: total, extra: total - deposited,
              pay: pay0, interest: paid - loan, paid: paid };
   }
@@ -296,9 +296,10 @@
     });
   }
 
-  function card(label, value, sub, cls, unit) {
+  function card(label, value, sub, cls, unit, approx) {
     return '<div class="fp-card"><div class="fp-label">' + label + '</div><div class="fp-val ' + (cls || "") +
-      '">' + value + " <small>" + (unit || "BYN") + "</small></div><div class=\"fp-sub\">" + sub + "</div></div>";
+      '">' + value + " <small>" + (unit || "BYN") + "</small>" +
+      (approx ? ' <span class="fp-approx">≈ ' + approx + " USD</span>" : "") + "</div><div class=\"fp-sub\">" + sub + "</div></div>";
   }
 
   function ln(label, v) {
@@ -337,12 +338,21 @@
     root.querySelector("#fpOut").innerHTML =
       '<div class="fp-hero"><div class="fp-big">' + big + '</div><div class="fp-sub">' + sub + "</div></div>" +
       '<div class="fp-cards">' +
-        card("Цена квартиры", m(r.priceByn), (usd ? fmt(r.priceByn) + " BYN" : "$" + fmt(r.priceUsd)) + " · " + fmt(r.fx, 3) + " BYN/$", "", u) +
-        '<div class="fp-card"><div class="fp-label">Откладывать в месяц</div><div class="fp-calc">' +
+        card("Цена квартиры", m(r.priceByn), (usd ? fmt(r.priceByn) + " BYN" : fmt(r.priceUsd) + " USD") + " · " + fmt(r.fx, 3) + " BYN/USD",
+          "", u, usd ? "" : fmt(r.priceUsd)) +
+        '<div class="fp-card"><div class="fp-label">Накопления в месяц</div><div class="fp-calc">' +
           ln("Доход", r.inc) + ln("− Расходы", r.exp) + (st.rent ? ln("− Аренда", r.rentEnd) : "") + "</div>" +
-          '<div class="fp-val">= ' + fmt(r.sav) + " <small>BYN</small></div>" + '<div class="fp-sub">≈ $' + fmt(r.sav / r.fx) + "</div></div>" +
-        card("Уже накопил", m(r.total), "минимальный первоначальный взнос " + minPct + "%: " + m(CFG.MIN_DOWN * r.priceByn) + " " + u, "is-blue", u) +
-        card(st.loan === "diff" ? "Будущий первый платёж по кредиту" : "Будущий платёж по кредиту", fmt(r.pay), "доступно в месяц: " + fmt(r.cap), "is-amber") +
+          '<div class="fp-val">= ' + fmt(r.sav) + " <small>BYN</small> " + '<span class="fp-approx">≈ ' + fmt(r.sav / r.fx) + " USD</span></div></div>" +
+        card("Уже накопил", m(r.total),
+          "минимальный первоначальный взнос " + minPct + "%: " + m(CFG.MIN_DOWN * r.priceByn) + " " + u +
+          "<br>необходимо накопить, чтобы потянуть платёж по кредиту: " + m(r.down) + " " + u,
+          "is-blue", u, usd ? "" : fmt(r.total / r.fx)) +
+        '<div class="fp-card"><div class="fp-label">Кредит</div>' +
+          '<div class="fp-sec"><div class="fp-sub">Сколько может потянуть платёж (доход − расходы, без аренды)</div><div class="fp-val">' +
+            fmt(r.cap) + " <small>BYN/мес</small></div></div>" +
+          '<div class="fp-sec"><div class="fp-sub">Требуемый платёж по кредиту' + (st.loan === "diff" ? " (первый)" : "") +
+            " с текущим уровнем накоплений (" + m(r.total) + " " + u + ')</div><div class="fp-val ' + (r.payNow > r.cap + 0.5 ? "is-red" : "is-green") + '">' +
+            fmt(r.payNow) + " <small>BYN/мес</small></div></div></div>" +
       "</div>" +
       (r.path.length ? '<div class="fp-chart"><div class="fp-bars">' + bars + '</div><div class="fp-axis"><span>' +
         r.startMonth + "</span><span>накоплено " + m(r.total) + " из " + m(r.down) + " " + u + "</span></div></div>" : "") +

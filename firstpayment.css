@@ -47,6 +47,11 @@
 .fp-ln b { font-weight: 500; color: var(--text-primary); }
 .fp-calc + .fp-val { padding-top: 6px; margin-top: 6px; border-top: 1px solid var(--border-subtle); }
 
+.fp-approx { font-size: 13px; font-weight: 500; color: var(--text-tertiary); white-space: nowrap; }
+.fp-sec + .fp-sec { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.fp-sec .fp-val { font-size: 18px; }
+.fp-sec .fp-sub { margin: 4px 0 0; }
+
 .fp-chart { margin-top: 16px; }
 .fp-bars {
   display: flex; align-items: flex-end; gap: 1px; height: 180px;
