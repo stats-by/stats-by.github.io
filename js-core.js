@@ -142,8 +142,8 @@ const CHECKBOX_ORDER = [
   "строительство_год",
 
   // Аренда
-  "аренда_стоимость_аренды_realt",
   "аренда_стоимость_аренды_t_s_by",
+  "аренда_стоимость_аренды_realt",
 
   // стоимость квартир Realt
   "realt_м2_стоимость_м2_однушек",
@@ -319,32 +319,104 @@ function getStableSeriesIndex(meta) {
 
 
 /*
- * Получить цвет ряда.
+ * Цвет и стиль линии каждого показателя — в одном месте.
  *
- * Для первых старых рядов пытаемся использовать существующие
- * CSS-переменные style.css.
- * Для всех остальных назначаем цвет из общей палитры.
+ * Логика: ЦВЕТ = что показываем, ПУНКТИР = второй вариант того же:
+ *   Минск — сплошная, Беларусь — пунктир;
+ *   Realt — сплошная, Wikidom — пунктир;
+ *   аренда t-s.by — сплошная, аренда Realt — пунктир.
+ * Цвета не зависят от порядка рядов в data.json.
+ *
+ * dash: "solid" | "dashed" | "dotted"; width — необязательно.
+ * Ряды, которых нет в таблице, получают цвет из SERIES_PALETTE.
  */
+const SERIES_STYLE = {
+  /* Зарплаты */
+  "средняя_средняя_минск":        { color: "#E14F63", dash: "solid" },
+  "средняя_средняя_по_стране":    { color: "#E14F63", dash: "dashed" },
+  "медианная_минск":              { color: "#F2B84B", dash: "solid" },
+  "медианная_беларусь":           { color: "#F2B84B", dash: "dashed" },
+  "мин_зп_минимальная_по_стране": { color: "#8A8F98", dash: "solid" },
+  [BPM_KEY]:                      { color: "#FFFFFF", dash: "solid", width: 1.5 },
+
+  /* Курс */
+  "курс_usd_курс_usd_byn":        { color: "#3DDC84", dash: "solid" },
+
+  /* Аренда */
+  "аренда_стоимость_аренды_t_s_by": { color: "#35D0E8", dash: "solid" },
+  "аренда_стоимость_аренды_realt":  { color: "#35D0E8", dash: "dashed" },
+
+  /* Стоимость м²: Realt — сплошная, Wikidom — пунктир */
+  "realt_м2_стоимость_м2_однушек":   { color: "#4C8DFF", dash: "solid" },
+  "wikidom_м2_стоимость_м2_однушек": { color: "#4C8DFF", dash: "dashed" },
+  "realt_м2_стоимость_м2_двушек":    { color: "#FF6FB5", dash: "solid" },
+  "wikidom_м2_стоимость_м2_двушек":  { color: "#FF6FB5", dash: "dashed" },
+  "realt_м2_стоимость_м2_трешек":    { color: "#B07CFF", dash: "solid" },
+  "wikidom_м2_стоимость_м2_трешек":  { color: "#B07CFF", dash: "dashed" },
+  "realt_м2_стоимость_м2_четырешек":   { color: "#FF9A52", dash: "solid" },
+  "wikidom_м2_стоимость_м2_четырешек": { color: "#FF9A52", dash: "dashed" },
+  "wikidom_м2_стоимость_м2_общая":     { color: "#A8D84F", dash: "solid" },
+
+  /* Объявления Realt */
+  "realt_м2_объявления_новостройки":         { color: "#7FD6C2", dash: "solid" },
+  "realt_м2_объявления_вторичка":            { color: "#7FD6C2", dash: "dashed" },
+  "realt_м2_объявления_новостройки_вторичка": { color: "#7FD6C2", dash: "dotted" },
+
+  /* Сделки */
+  "realt_сделки_количество_сделок_новостройки_вторичка":   { color: "#D6D96B", dash: "solid" },
+  "wikidom_сделки_количество_сделок_новостройки_вторичка": { color: "#D6D96B", dash: "dashed" },
+  "wikidom_сделки_количество_сделок_новостройки":          { color: "#E8A33D", dash: "solid" },
+  "wikidom_сделки_количество_сделок_вторичка":             { color: "#E8A33D", dash: "dashed" },
+
+  /* Строительство */
+  "строительство_год_тыс": { color: "#C98B5B", dash: "solid" },
+  "строительство_год":     { color: "#C98B5B", dash: "dashed" },
+};
+
+
+/* Цвет ряда: из SERIES_STYLE, иначе — из общей палитры по индексу. */
 function getSeriesColor(meta, index) {
-  const cssColorMap = {
-    "медианная_беларусь": "--c-median-country",
-    "средняя_средняя_по_стране": "--c-avg-country",
-    "медианная_минск": "--c-avg-minsk",
-    "средняя_средняя_минск": "--c-avg-minsk",
-    "курс_usd_курс_usd_byn": "--c-rate",
-    "realt_м2_1к": "--c-price-1k",
-    "realt_м2_2к": "--c-price-2k",
-    "realt_м2_3к": "--c-price-3k",
-    "realt_м2_4к": "--c-price-4k",
-  };
+  const style = meta && SERIES_STYLE[meta.key];
 
-  const variable = cssColorMap[meta.key];
-
-  if (variable && resolvedColors[variable]) {
-    return resolvedColors[variable];
+  if (style) {
+    return style.color;
   }
 
   return SERIES_PALETTE[index % SERIES_PALETTE.length];
+}
+
+
+/* Тип линии: "solid" | "dashed" | "dotted". */
+function getSeriesDash(meta) {
+  const style = meta && SERIES_STYLE[meta.key];
+
+  return (style && style.dash) || "solid";
+}
+
+
+function getSeriesWidth(meta, fallback) {
+  const style = meta && SERIES_STYLE[meta.key];
+
+  return (style && style.width) || fallback;
+}
+
+
+/*
+ * Квадратик цвета в панели показателей: сплошной у сплошных линий,
+ * со штриховкой (is-dashed) / точками (is-dotted) — у остальных.
+ */
+function applySwatchStyle(element, meta, color) {
+  const dash = getSeriesDash(meta);
+
+  element.style.setProperty("--sw", color);
+  element.classList.toggle("is-dashed", dash === "dashed");
+  element.classList.toggle("is-dotted", dash === "dotted");
+
+  if (dash === "solid") {
+    element.style.background = color;
+  } else {
+    element.style.background = "";
+  }
 }
 
 

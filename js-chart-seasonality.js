@@ -308,7 +308,7 @@ function buildSeasonalityCheckboxPanel() {
 
     const swatch = document.createElement("span");
     swatch.className = "check-swatch";
-    swatch.style.background = color;
+    applySwatchStyle(swatch, meta, color);
 
     const text = document.createElement("span");
     text.className = "check-label";

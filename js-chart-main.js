@@ -76,7 +76,7 @@ function buildCheckboxPanel() {
     const swatch = document.createElement("span");
 
     swatch.className = "check-swatch";
-    swatch.style.background = color;
+    applySwatchStyle(swatch, meta, color);
 
     const text = document.createElement("span");
 
@@ -306,7 +306,8 @@ function buildSeries() {
 
       lineStyle: {
         color,
-        width: 2,
+        width: getSeriesWidth(meta, 2),
+        type: getSeriesDash(meta),
       },
 
       itemStyle: {
@@ -712,7 +713,7 @@ function buildTooltipFormatter(params) {
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
-        <span class="tt-dot" style="background:${color};"></span>
+        <span class="tt-dot ${getSeriesDash(meta) === "solid" ? "" : "is-dashed"}"${getSeriesDash(meta) === "solid" ? ` style="background:${color};"` : ""}></span>
         <span class="tt-name">${meta.tooltip_label || getSeriesLabel(meta)}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
       </div>
