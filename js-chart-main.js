@@ -1117,7 +1117,7 @@ function buildZoomShadowSeries(seriesList) {
 /* ============================================================
    События на первом графике (data_events.json)
    ============================================================
-   data_events.json собирает build_events.py из events.xlsx. Маркеры —
+   data_events.json собирает build_events.py из data_events.xlsx. Маркеры —
    обычные HTML-кнопки в слое #eventsLayer поверх графика: они
    стоят в отдельной строке под подписями оси X и привязаны к
    месяцу события, поэтому двигаются вместе с зумом.
@@ -1126,8 +1126,8 @@ function buildZoomShadowSeries(seriesList) {
    пунктирную вертикальную линию и тултип с описанием.
    ============================================================ */
 
-/* Лист events.xlsx, события которого рисуются на первом графике. */
-const EVENTS_SHEET = "медианная";
+/* Лист data_events.xlsx, события которого рисуются на первом графике. */
+const EVENTS_SHEET = "события";
 
 const EVENT_COLOR_NAMES = new Set(["red", "green", "blue", "yellow"]);
 
