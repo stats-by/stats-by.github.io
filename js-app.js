@@ -7,11 +7,11 @@
 
      • переключатели (wireSegmented / syncSegmented);
      • Deep Linking: сборка и копирование ссылки, восстановление
-       состояния (?g=1, ?g=2) — buildDeepLinkUrl оборачивает
-       блок «Налоги»;
-     • верхние блоки: курс USD и прогноз, медианная ЗП
-       (renderMedianBlock оборачивает блок «Налоги»);
-     • «Налоги»: переключатель до / после вычета (бывший tax.js);
+       состояния (?g=1, ?g=2); в ссылку добавляется режим налогов (?t=);
+     • верхние блоки: курс USD и прогноз, зарплата (медианная и
+       средняя; значения — с учётом режима налогов, Tax из js-core.js);
+     • «Налоги»: интерфейс переключателя до / после вычета
+       (режим, ставки и формула — Tax в js-core.js);
      • «Распределение доходов» (бывший income.js);
      • init() — порядок инициализации сайта, и его запуск
        по DOMContentLoaded.
@@ -139,6 +139,9 @@ function buildDeepLinkUrl(source) {
       params.set("z", `${startMonth},${endMonth}`);
     }
   }
+
+  /* Режим налогов (читается в Tax, js-core.js, при загрузке страницы). */
+  params.set("t", Tax.getMode());
 
   url.search = params.toString();
   return url.toString();
@@ -571,7 +574,7 @@ function wireInfoTip(wrapId, buttonId, tipId) {
 /*
  * Блок 2: зарплата — медианная и средняя, переключатель Минск / Беларусь,
  * рост за 12 месяцев (последний известный месяц к тому же месяцу
- * годом ранее). Значения — с учётом режима налогов (window.Tax).
+ * годом ранее). Значения — с учётом режима налогов (Tax, js-core.js).
  */
 let salaryRegion = "minsk";
 
@@ -601,7 +604,7 @@ function latestWithYearChange(values) {
 
 function renderMedianBlock() {
   const keys = SALARY_KEYS[salaryRegion] || SALARY_KEYS.minsk;
-  const taxText = window.Tax ? window.Tax.label() : "до вычета налогов";
+  const taxText = Tax.label();
 
   [
     ["median", "median"],
@@ -624,10 +627,7 @@ function renderMedianBlock() {
       return;
     }
 
-    valueEl.textContent = formatNumber(
-      window.Tax ? window.Tax.apply(info.value) : info.value,
-      0
-    );
+    valueEl.textContent = formatNumber(Tax.apply(info.value), 0);
 
     if (deltaEl) {
       deltaEl.textContent = info.pct == null
@@ -1075,165 +1075,47 @@ async function init() {
 /* ============================================================
    Налоги: переключатель «до вычета / после вычета»
    ============================================================
-   Все исходные данные (data.json, data_salary.json) — ДО вычета
-   налогов. Этот блок:
-     1) хранит режим сайта (по умолчанию — после вычета);
-     2) считает чистый доход = брутто × TAX_FACTOR;
-     3) оборачивает функции js-core.js и js-app.js, чтобы пересчитать зарплаты
-        (медианная, средняя, минимальная) на графиках и в блоке
-        «Медианная ЗП»;
-     4) сообщает блоку «Распределение доходов» о смене режима
-        (событие taxmodechange).
+   Режим, ставки и формула живут в Tax (js-core.js); сами пересчёты
+   выполняют потребители напрямую: convertMonthlyValues (графики),
+   renderMedianBlock, блок «Распределение доходов», buildDeepLinkUrl.
 
-   Стоит после js-core.js (там convertMonthlyValues) и ДО блока
-   «Распределение доходов», который использует window.Tax.
+   Здесь — только интерфейс:
+     1) кнопки #taxToggle вызывают Tax.setMode(...);
+     2) на событие taxmodechange (его рассылает Tax.setMode)
+        синхронизируем кнопки и перерисовываем оба графика и
+        верхние блоки. Блок «Распределение доходов» подписан на то же
+        событие сам.
+
+   Подключается при загрузке файла (а не из init()), чтобы переключатель
+   работал независимо от загрузки data.json.
    ============================================================ */
-(function () {
-  "use strict";
 
-  /* ----- Ставки (меняются в одном месте) --------------------
-     Подоходный налог 13% берётся с суммы после взноса в ФСЗН
-     (1% с работника):  нетто = брутто × (1 − 0,01) × (1 − 0,13).
-     Стандартные налоговые вычеты не учитываются.
-     Ставка принята единой для всех лет.                        */
-  var INCOME_TAX = 0.13;
-  var PENSION_FUND = 0.01;
-  var TAX_FACTOR = (1 - PENSION_FUND) * (1 - INCOME_TAX);
+function refreshAfterTaxChange() {
+  /* Данные ещё не загружены — перерисовывать нечего. */
+  if (!DATA) return;
 
-  var MODE_NET = "net";
-  var MODE_GROSS = "gross";
+  render();
+  renderSeasonality();
+  renderTopBlocks();
+}
 
-  var mode = MODE_NET;   /* по умолчанию — после вычета */
+syncSegmented("taxToggle", Tax.getMode());
 
-  /* Режим из ссылки (?t=gross) */
-  try {
-    var fromUrl = new URLSearchParams(window.location.search).get("t");
-    if (fromUrl === MODE_GROSS || fromUrl === MODE_NET) mode = fromUrl;
-  } catch (e) { /* без параметров */ }
+wireSegmented("taxToggle", (value) => {
+  Tax.setMode(value);
+});
 
-  var Tax = {
-    factor: TAX_FACTOR,
-    getMode: function () { return mode; },
-    isNet: function () { return mode === MODE_NET; },
-
-    /* Денежное значение зарплаты -> с учётом режима. */
-    apply: function (value) {
-      if (value == null || !isFinite(Number(value))) return value;
-      return mode === MODE_NET ? Number(value) * TAX_FACTOR : Number(value);
-    },
-
-    /* Короткая подпись для подзаголовков. */
-    label: function () {
-      return mode === MODE_NET ? "после вычета налогов" : "до вычета налогов";
-    }
-  };
-
-  window.Tax = Tax;
-
-
-  /* ----- 1. Зарплатные ряды на графиках ---------------------
-     convertMonthlyValues(meta, currency) вызывается и основным
-     графиком, и сезонностью. Умножаем зарплатные ряды на
-     коэффициент; пересчёт в USD (деление на курс) от этого
-     не меняется — порядок операций не важен.                    */
-  if (typeof convertMonthlyValues === "function") {
-    var originalConvert = convertMonthlyValues;
-
-    window.convertMonthlyValues = function (meta, currency) {
-      var values = originalConvert(meta, currency);
-
-      if (mode !== MODE_NET) return values;
-      if (typeof getInternalGroup !== "function" ||
-          getInternalGroup(meta) !== "salary") {
-        return values;
-      }
-
-      /* БПМ — не зарплата, налоги с него не берутся. */
-      if (meta && meta.key === BPM_KEY) return values;
-
-      return values.map(function (value) {
-        return value == null || !isFinite(Number(value))
-          ? value
-          : Number(value) * TAX_FACTOR;
-      });
-    };
-  }
-
-
-  /* ----- 2. Блок «Зарплата» --------------------------------
-     renderMedianBlock (выше) сам берёт режим из window.Tax.      */
-
-
-  /* ----- 3. Ссылка на график: добавляем режим --------------- */
-  if (typeof buildDeepLinkUrl === "function") {
-    var originalDeepLink = buildDeepLinkUrl;
-
-    window.buildDeepLinkUrl = function (source) {
-      var url = new URL(originalDeepLink(source));
-      url.searchParams.set("t", mode);
-      return url.toString();
-    };
-  }
-
-
-  /* ----- 4. Переключатель ----------------------------------- */
-  function syncButtons() {
-    var toggle = document.getElementById("taxToggle");
-    if (!toggle) return;
-
-    toggle.querySelectorAll(".segmented-btn").forEach(function (button) {
-      button.classList.toggle("is-active", button.dataset.value === mode);
-    });
-  }
-
-  function refreshAll() {
-    try {
-      if (typeof DATA !== "undefined" && DATA) {
-        render();
-        renderSeasonality();
-        renderTopBlocks();
-      }
-    } catch (error) {
-      console.warn("Не удалось перерисовать после смены режима налогов:", error);
-    }
-
-    document.dispatchEvent(
-      new CustomEvent("taxmodechange", { detail: { mode: mode } })
-    );
-  }
-
-  function setMode(next) {
-    if (next !== MODE_NET && next !== MODE_GROSS) return;
-    if (next === mode) return;
-
-    mode = next;
-    syncButtons();
-    refreshAll();
-  }
-
-  Tax.setMode = setMode;
-
-  var toggle = document.getElementById("taxToggle");
-
-  if (toggle) {
-    toggle.querySelectorAll(".segmented-btn").forEach(function (button) {
-      button.addEventListener("click", function () {
-        setMode(button.dataset.value);
-      });
-    });
-  }
-
-  syncButtons();
-})();
+document.addEventListener("taxmodechange", (event) => {
+  syncSegmented("taxToggle", event.detail.mode);
+  refreshAfterTaxChange();
+});
 
 
 /* ============================================================
    Блок «Распределение доходов»
    Данные: data_salary.json (распределение) и data.json (медиана).
    Почти самодостаточный блок: из остального кода использует только
-   wireInfoTip (кнопка «i»).
-   Режим налогов берётся из блока «Налоги» (window.Tax); без него —
-   значения показываются как есть (до вычета).
+   wireInfoTip (кнопка «i») и Tax (js-core.js) — режим налогов.
    ============================================================ */
 (function () {
   "use strict";
@@ -1267,11 +1149,11 @@ async function init() {
 
   /* Пересчёт порога дохода (в данных — до вычета) в текущий режим. */
   function money(value) {
-    return window.Tax ? window.Tax.apply(value) : value;
+    return Tax.apply(value);
   }
 
   function taxLabel() {
-    return window.Tax ? window.Tax.label() : "до вычета налогов";
+    return Tax.label();
   }
 
   /* Доли меньше 10% — с одним знаком после запятой, остальные — целые. */
@@ -1439,7 +1321,7 @@ async function init() {
     });
   });
 
-  /* Смена режима «до / после вычета» (блок «Налоги»). */
+  /* Смена режима «до / после вычета» (Tax.setMode, js-core.js). */
   document.addEventListener("taxmodechange", render);
 
   /* Подсказка «i» (wireInfoTip объявлена выше в этом файле). */

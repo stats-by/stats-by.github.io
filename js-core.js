@@ -10,9 +10,9 @@
      • состояние (state, DATA, chart, seasonalityChart);
      • метаданные рядов, группы, цвета;
      • загрузка и проверка data.json;
-     • даты, единицы, конвертация валют (convertMonthlyValues —
-       её оборачивает блок «Налоги» в js-app.js), годовые ряды,
-       интерполяция, проценты;
+     • налоги (Tax): режим «до / после вычета», ставка, формула;
+     • даты, единицы, конвертация валют и налогов
+       (convertMonthlyValues), годовые ряды, интерполяция, проценты;
      • форматирование чисел;
      • общее для обоих графиков: подсветка линий и строки тултипа,
        пунктир 100%, геометрия и вид ручек слайдера;
@@ -658,6 +658,104 @@ function getRawMonthlyValues(meta) {
 
 
 /* ============================================================
+   Налоги: режим «до вычета / после вычета»
+   ============================================================
+   Все исходные данные (data.json, data_salary.json) — ДО вычета
+   налогов. Tax — единственное место, где живут режим сайта, ставки
+   и формула пересчёта:
+
+     нетто = брутто × (1 − ФСЗН 1%) × (1 − подоходный 13%)
+
+   Подоходный налог 13% берётся с суммы после взноса в ФСЗН
+   (1% с работника). Стандартные налоговые вычеты не учитываются.
+   Ставка принята единой для всех лет.
+
+   Потребители обращаются к Tax напрямую (без проверок наличия):
+     • convertMonthlyValues (ниже) — зарплатные ряды обоих графиков;
+     • renderMedianBlock, «Распределение доходов», buildDeepLinkUrl
+       (js-app.js) — Tax.apply / Tax.label / Tax.getMode.
+
+   Смена режима: Tax.setMode(...) меняет режим и рассылает на
+   document событие "taxmodechange" (detail.mode). На него подписаны
+   js-app.js (перерисовка графиков и верхних блоков, кнопки
+   переключателя) и блок «Распределение доходов».
+
+   Если Tax окажется недоступен — это ReferenceError в консоли,
+   а не тихие суммы до вычета.
+   ============================================================ */
+
+const Tax = (function () {
+  const INCOME_TAX = 0.13;
+  const PENSION_FUND = 0.01;
+  const FACTOR = (1 - PENSION_FUND) * (1 - INCOME_TAX);
+
+  const MODE_NET = "net";
+  const MODE_GROSS = "gross";
+
+  /* По умолчанию — после вычета. */
+  let mode = MODE_NET;
+
+  /* Режим из ссылки (?t=gross / ?t=net). */
+  try {
+    const fromUrl = new URLSearchParams(window.location.search).get("t");
+
+    if (fromUrl === MODE_GROSS || fromUrl === MODE_NET) {
+      mode = fromUrl;
+    }
+  } catch (error) {
+    /* без параметров */
+  }
+
+  return {
+    factor: FACTOR,
+
+    getMode() {
+      return mode;
+    },
+
+    isNet() {
+      return mode === MODE_NET;
+    },
+
+    /* Денежное значение зарплаты -> с учётом режима. */
+    apply(value) {
+      if (value == null || !isFinite(Number(value))) return value;
+
+      return mode === MODE_NET ? Number(value) * FACTOR : Number(value);
+    },
+
+    /* Короткая подпись для подзаголовков. */
+    label() {
+      return mode === MODE_NET ? "после вычета налогов" : "до вычета налогов";
+    },
+
+    /*
+     * Облагается ли ряд: все зарплатные ряды (медианная, средняя,
+     * минимальная). БПМ — не зарплата, налоги с него не берутся.
+     */
+    isTaxedMeta(meta) {
+      return (
+        !!meta &&
+        meta.key !== BPM_KEY &&
+        getInternalGroup(meta) === "salary"
+      );
+    },
+
+    setMode(next) {
+      if (next !== MODE_NET && next !== MODE_GROSS) return;
+      if (next === mode) return;
+
+      mode = next;
+
+      document.dispatchEvent(
+        new CustomEvent("taxmodechange", { detail: { mode } })
+      );
+    },
+  };
+})();
+
+
+/* ============================================================
    Конвертация валюты
    ============================================================ */
 
@@ -692,7 +790,10 @@ function getUsdRateSeries() {
 }
 
 
-function convertMonthlyValues(meta, currency) {
+/*
+ * Только валюта (без налогов): исходный ряд -> BYN или USD.
+ */
+function convertMonthlyCurrency(meta, currency) {
   const raw = getRawMonthlyValues(meta);
 
   if (!Array.isArray(raw)) {
@@ -780,6 +881,25 @@ function convertMonthlyValues(meta, currency) {
   }
 
   return raw.slice();
+}
+
+
+/*
+ * Месячные значения ряда для графиков: валюта + налоги.
+ *
+ * Зарплатные ряды в режиме «после вычета» умножаются на коэффициент
+ * Tax (пересчёт в USD — деление на курс — от этого не меняется:
+ * порядок операций не важен). Остальные ряды — как есть.
+ * Вызывается и основным графиком, и сезонностью.
+ */
+function convertMonthlyValues(meta, currency) {
+  const values = convertMonthlyCurrency(meta, currency);
+
+  if (!Tax.isNet() || !Tax.isTaxedMeta(meta)) {
+    return values;
+  }
+
+  return values.map((value) => Tax.apply(value));
 }
 
 
