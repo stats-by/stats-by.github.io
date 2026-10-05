@@ -132,14 +132,16 @@ function initializeVisibility() {
    * Используем ключи из data.json, а не подписи.
    *
    * По умолчанию:
-   *   - средняя МИНСК
-   *   - средняя ПО СТРАНЕ
-   *   - курс USD/BYN
+   *   - средняя ЗП Минск
+   *   - медианная ЗП Минск
+   *   - стоимость аренды t-s.by
+   *   - стоимость м2 однушек Realt
    */
   const defaultKeys = new Set([
     "средняя_средняя_минск",
-    "средняя_средняя_по_стране",
-    "курс_usd_курс_usd_byn",
+    "медианная_минск",
+    "аренда_стоимость_аренды_t_s_by",
+    "realt_м2_стоимость_м2_однушек",
   ]);
 
   metas.forEach((meta) => {
@@ -1152,8 +1154,23 @@ let eventTipEl = null;
 let eventsOutsideListenerAdded = false;
 
 
-/* «2026-08-13» -> «13 августа 2026». */
+/*
+ * «2026-08-13» -> «13 августа 2026».
+ * Если указан только месяц («2011-03») — «март 2011», без дня.
+ */
 function fmtEventDate(iso) {
+  const monthOnly = /^(\d{4})-(\d{2})$/.exec(String(iso));
+
+  if (monthOnly) {
+    const m = Number(monthOnly[2]);
+
+    if (m >= 1 && m <= 12) {
+      return `${MONTH_NAMES_RU[m - 1].toLowerCase()} ${monthOnly[1]}`;
+    }
+
+    return String(iso);
+  }
+
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso));
 
   if (!match) {
@@ -1191,7 +1208,13 @@ async function loadEvents() {
       return [];
     }
 
-    return list.filter((ev) =>
+    return list
+      .map((ev) =>
+        ev && typeof ev.date === "string" && !ev.month
+          ? { ...ev, month: ev.date.slice(0, 7) }
+          : ev
+      )
+      .filter((ev) =>
       ev &&
       typeof ev.text === "string" &&
       EVENT_COLOR_NAMES.has(ev.color) &&

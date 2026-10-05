@@ -1619,18 +1619,51 @@ const ZOOM_SHADOW_ID = "__zoom_shadow__";
    Общие константы и хелперы
    ============================================================
    Относятся к верхним блокам (js-app.js), но нужны и другим:
-   RATE_KEY и isExcludedRateYear — графику сезонности,
+   RATE_KEY и isExcludedRateMonth — графику сезонности,
    MEDIAN_MINSK_KEY и isNum — блоку «Налоги» (js-app.js).
    ============================================================ */
 
 const RATE_KEY = "курс_usd_курс_usd_byn";
 const MEDIAN_MINSK_KEY = "медианная_минск";
 
-/* Годы, исключаемые из среднего изменения курса USD (аномалия 2022). */
-const RATE_EXCLUDED_YEARS = [2022];
+/*
+ * Месяцы, исключаемые из расчёта медианного изменения курса USD
+ * (аномалия 2022): изменение, затрагивающее такой месяц, не считается.
+ */
+const RATE_EXCLUDED_MONTHS = ["2022-02", "2022-03", "2022-04", "2022-05"];
 
-function isExcludedRateYear(year) {
-  return RATE_EXCLUDED_YEARS.includes(Number(year));
+/* В верхнем блоке курса учитываем только данные с этого месяца. */
+const RATE_STATS_FROM = "2016-05";
+
+function isExcludedRateMonth(ym) {
+  return RATE_EXCLUDED_MONTHS.includes(ym);
+}
+
+/* Медиана массива чисел (null, если массив пуст). */
+function median(values) {
+  const sorted = values
+    .map(Number)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+
+  if (!sorted.length) return null;
+
+  const mid = Math.floor(sorted.length / 2);
+
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/* Показатели, которых нет в графике сезонности (кроме группы «Строительство»). */
+const SEASONALITY_HIDDEN_KEYS = [
+  "медианная_беларусь",
+  "медианная_минск",
+];
+
+function isSeasonalityMeta(meta) {
+  return getGroupLabel(meta) !== "Строительство" &&
+    !SEASONALITY_HIDDEN_KEYS.includes(meta.key);
 }
 
 function isNum(value) {

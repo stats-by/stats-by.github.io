@@ -41,6 +41,7 @@
         <div class="stat-forecast-label" id="rateForecastLabel">Прогноз</div>
         <div class="stat-forecast-row">
           <span class="stat-delta" id="rateForecastPct">—</span>
+          <span class="stat-forecast-value" id="rateForecastValue"></span>
           <span class="info-wrap" id="rateInfoWrap">
             <button type="button" class="info-btn" id="rateInfoBtn" aria-label="Из чего считается прогноз" aria-describedby="rateInfoTip">i</button>
             <div class="info-tip" id="rateInfoTip" role="tooltip" hidden></div>
@@ -49,20 +50,49 @@
       </div>
     </article>
 
-    <!-- Блок 2: медианная зарплата в Минске (временный, будет переделан) -->
+    <!-- Блок 2: зарплата — медианная и средняя, рост за 12 месяцев -->
     <article class="stat-card" id="blockMedian">
-      <h2 class="stat-title">Медианная ЗП, Минск</h2>
-      <div class="stat-main">
-        <span class="stat-value" id="medianValue">—</span>
-        <span class="stat-unit">BYN</span>
+      <div class="stat-head">
+        <h2 class="stat-title">Зарплата</h2>
+        <div class="segmented segmented-sm" id="salaryRegionToggle" role="group" aria-label="Регион">
+          <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
+          <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>
+        </div>
       </div>
-      <div class="stat-sub" id="medianMonthLabel"></div>
+
+      <div class="salary-row">
+        <div class="salary-label">Медианная</div>
+        <div class="stat-main">
+          <span class="stat-value" id="medianValue">—</span>
+          <span class="stat-unit">BYN</span>
+          <span class="stat-delta stat-delta-sm" id="medianDelta"></span>
+          <span class="stat-note" id="medianNote"></span>
+        </div>
+        <div class="stat-sub" id="medianMonthLabel"></div>
+      </div>
+
+      <div class="salary-row">
+        <div class="salary-label">Средняя</div>
+        <div class="stat-main">
+          <span class="stat-value" id="avgValue">—</span>
+          <span class="stat-unit">BYN</span>
+          <span class="stat-delta stat-delta-sm" id="avgDelta"></span>
+          <span class="stat-note" id="avgNote"></span>
+        </div>
+        <div class="stat-sub" id="avgMonthLabel"></div>
+      </div>
     </article>
 
     <!-- Блок 3: распределение доходов (js-app.js, data_salary.json) -->
     <article class="stat-card" id="blockIncome">
       <div class="stat-head">
-        <h2 class="stat-title">Распределение доходов</h2>
+        <div class="stat-title-wrap">
+          <h2 class="stat-title">Распределение доходов</h2>
+          <span class="info-wrap is-static" id="incomeInfoWrap">
+            <button type="button" class="info-btn" id="incomeInfoBtn" aria-label="Все интервалы распределения доходов" aria-describedby="incomeInfoTip">i</button>
+            <div class="info-tip info-tip-wide" id="incomeInfoTip" role="tooltip" hidden></div>
+          </span>
+        </div>
         <div class="segmented segmented-sm" id="incomeRegionToggle" role="group" aria-label="Регион">
           <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
           <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>

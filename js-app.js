@@ -266,7 +266,7 @@ function restoreDeepLinkState() {
   if (source === "2") {
     const validKeys = new Set(
       getSeriesMeta()
-        .filter((meta) => getGroupLabel(meta) !== "Строительство")
+        .filter(isSeasonalityMeta)
         .map((meta) => meta.key)
     );
     const seasonalityKey = params.get("s");
@@ -361,8 +361,12 @@ function updateDataUpTo() {
  * Базовый месяц — прошлый календарный месяц; если по нему ещё нет
  * данных, берём последний месяц, для которого курс есть.
  * Для каждого прошлого года считаем изменение «базовый месяц ->
- * следующий месяц», прогноз — среднее этих изменений
- * (то же, что «среднее» в тултипе графика сезонности).
+ * следующий месяц»; прогноз — МЕДИАНА этих изменений.
+ *
+ * Не учитываются: данные до RATE_STATS_FROM (май 2016) и изменения,
+ * затрагивающие месяцы-аномалии 2022 (RATE_EXCLUDED_MONTHS).
+ * Годы не из расчёта в подсказке показываются зачёркнутыми.
+ * Список изменений — от новых лет к старым.
  */
 function computeRateForecast() {
   const values = DATA.series[RATE_KEY];
@@ -394,36 +398,44 @@ function computeRateForecast() {
   const changes = [];
 
   for (let i = 0; i < baseIdx; i++) {
-    if (Number(DATA.months[i].slice(5, 7)) !== baseMonthNumber) continue;
+    const month = DATA.months[i];
+
+    if (Number(month.slice(5, 7)) !== baseMonthNumber) continue;
+    if (month < RATE_STATS_FROM) continue;
     if (!isNum(values[i]) || !isNum(values[i + 1])) continue;
     if (Number(values[i]) === 0) continue;
 
-    const year = Number(DATA.months[i].slice(0, 4));
+    const year = Number(month.slice(0, 4));
 
     changes.push({
       label: baseMonthNumber === 12 ? `${year}→${year + 1}` : String(year),
       year,
-      excluded: isExcludedRateYear(year),
+      excluded:
+        isExcludedRateMonth(month) ||
+        isExcludedRateMonth(DATA.months[i + 1]),
       pct: (Number(values[i + 1]) / Number(values[i]) - 1) * 100,
     });
   }
 
-  const counted = changes.filter((item) => !item.excluded);
+  changes.reverse();
 
-  if (!counted.length) {
+  const counted = changes.filter((item) => !item.excluded);
+  const med = median(counted.map((item) => item.pct));
+
+  if (med == null) {
     return null;
   }
 
-  const average =
-    counted.reduce((sum, item) => sum + item.pct, 0) / counted.length;
+  const baseValue = Number(values[baseIdx]);
 
   return {
     baseMonth: DATA.months[baseIdx],
-    baseValue: Number(values[baseIdx]),
+    baseValue,
     baseMonthNumber,
     nextMonthNumber: baseMonthNumber % 12 + 1,
     changes,
-    average,
+    median: med,
+    forecastValue: baseValue * (1 + med / 100),
   };
 }
 
@@ -452,21 +464,30 @@ function renderRateBlock() {
     `за ${fmtMonthRu(forecast.baseMonth).toLowerCase()}`;
 
   document.getElementById("rateForecastLabel").textContent =
-    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()}`;
+    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()} (медиана)`;
 
   const pctEl = document.getElementById("rateForecastPct");
-  pctEl.textContent = formatPercentChange(100 + forecast.average);
-  pctEl.className = `stat-delta ${pctClass(forecast.average)}`.trim();
+  pctEl.textContent = formatPercentChange(100 + forecast.median);
+  pctEl.className = `stat-delta ${pctClass(forecast.median)}`.trim();
 
-  /* Подсказка: изменения по годам. */
+  /* Прогнозное значение курса — серым, моноширинным шрифтом, x,xx. */
+  const forecastValueEl = document.getElementById("rateForecastValue");
+
+  if (forecastValueEl) {
+    forecastValueEl.textContent = `≈ ${formatNumber(forecast.forecastValue, 2)}`;
+  }
+
+  /* Подсказка: изменения по годам, от новых к старым. */
   const tip = document.getElementById("rateInfoTip");
-  const firstYear = forecast.changes[0].year;
+  const firstYear = forecast.changes[forecast.changes.length - 1].year;
 
   tip.innerHTML = "";
 
   const title = document.createElement("div");
   title.className = "info-tip-title";
-  title.textContent = `согласно статистике с ${firstYear} года:`;
+  title.textContent =
+    `медианное изменение по статистике с ${firstYear} года ` +
+    `(зачёркнутые не учитываются):`;
   tip.appendChild(title);
 
   forecast.changes.forEach((item) => {
@@ -485,49 +506,56 @@ function renderRateBlock() {
     tip.appendChild(row);
   });
 
-  wireRateInfo();
+  wireInfoTip("rateInfoWrap", "rateInfoBtn", "rateInfoTip");
 }
 
 
-let rateInfoWired = false;
+/*
+ * Кнопка «i» с всплывающей подсказкой (курс USD, распределение доходов).
+ * Мышь — пока курсор над кнопкой или подсказкой; тач — касание
+ * открывает, повторное закрывает; клавиатура — фокус.
+ */
+function wireInfoTip(wrapId, buttonId, tipId) {
+  const wrap = document.getElementById(wrapId);
+  const button = document.getElementById(buttonId);
+  const tip = document.getElementById(tipId);
 
-function wireRateInfo() {
-  if (rateInfoWired) return;
+  if (!wrap || !button || !tip || wrap.dataset.wired) return;
 
-  const wrap = document.getElementById("rateInfoWrap");
-  const button = document.getElementById("rateInfoBtn");
-  const tip = document.getElementById("rateInfoTip");
+  wrap.dataset.wired = "1";
 
-  if (!wrap || !button || !tip) return;
-
-  rateInfoWired = true;
+  let timer = null;
 
   const show = () => {
+    clearTimeout(timer);
     tip.hidden = false;
     button.classList.add("is-active");
   };
 
   const hide = () => {
+    clearTimeout(timer);
     tip.hidden = true;
     button.classList.remove("is-active");
   };
 
-  /* Мышь: подсказка, пока курсор над кнопкой. */
+  const hideSoon = () => {
+    clearTimeout(timer);
+    timer = setTimeout(hide, 150);
+  };
+
   wrap.addEventListener("pointerenter", (event) => {
     if (event.pointerType === "mouse") show();
   });
 
   wrap.addEventListener("pointerleave", (event) => {
-    if (event.pointerType === "mouse") hide();
+    if (event.pointerType === "mouse") hideSoon();
   });
 
-  /* Тач: касание открывает, повторное — закрывает. */
   button.addEventListener("click", () => {
     if (!IS_TOUCH) return;
     tip.hidden ? show() : hide();
   });
 
-  /* Клавиатура. */
   button.addEventListener("focus", () => {
     if (button.matches(":focus-visible")) show();
   });
@@ -540,23 +568,85 @@ function wireRateInfo() {
 }
 
 
-/* Блок 2: последняя известная медианная ЗП по Минску (временная версия). */
-function renderMedianBlock() {
-  const values = DATA.series[MEDIAN_MINSK_KEY];
-  const valueEl = document.getElementById("medianValue");
+/*
+ * Блок 2: зарплата — медианная и средняя, переключатель Минск / Беларусь,
+ * рост за 12 месяцев (последний известный месяц к тому же месяцу
+ * годом ранее). Значения — с учётом режима налогов (window.Tax).
+ */
+let salaryRegion = "minsk";
 
-  if (!Array.isArray(values) || !valueEl) return;
+const SALARY_KEYS = {
+  minsk: { median: "медианная_минск", avg: "средняя_средняя_минск" },
+  belarus: { median: "медианная_беларусь", avg: "средняя_средняя_по_стране" },
+};
+
+
+function latestWithYearChange(values) {
+  if (!Array.isArray(values)) return null;
 
   let idx = values.length - 1;
 
   while (idx >= 0 && !isNum(values[idx])) idx--;
 
-  if (idx < 0) return;
+  if (idx < 0) return null;
 
-  valueEl.textContent = formatNumber(values[idx], 0);
+  const prevValue = values[idx - 12];
+  const pct = isNum(prevValue) && Number(prevValue) !== 0
+    ? (Number(values[idx]) / Number(prevValue) - 1) * 100
+    : null;
 
-  document.getElementById("medianMonthLabel").textContent =
-    fmtMonthRu(DATA.months[idx]).toLowerCase();
+  return { idx, value: Number(values[idx]), pct };
+}
+
+
+function renderMedianBlock() {
+  const keys = SALARY_KEYS[salaryRegion] || SALARY_KEYS.minsk;
+  const taxText = window.Tax ? window.Tax.label() : "до вычета налогов";
+
+  [
+    ["median", "median"],
+    ["avg", "avg"],
+  ].forEach(([kind, prefix]) => {
+    const valueEl = document.getElementById(`${prefix}Value`);
+    const deltaEl = document.getElementById(`${prefix}Delta`);
+    const noteEl = document.getElementById(`${prefix}Note`);
+    const labelEl = document.getElementById(`${prefix}MonthLabel`);
+
+    if (!valueEl) return;
+
+    const info = latestWithYearChange(DATA.series[keys[kind]]);
+
+    if (!info) {
+      valueEl.textContent = "—";
+      if (deltaEl) deltaEl.textContent = "";
+      if (noteEl) noteEl.textContent = "";
+      if (labelEl) labelEl.textContent = "";
+      return;
+    }
+
+    valueEl.textContent = formatNumber(
+      window.Tax ? window.Tax.apply(info.value) : info.value,
+      0
+    );
+
+    if (deltaEl) {
+      deltaEl.textContent = info.pct == null
+        ? ""
+        : formatPercentChange(100 + info.pct);
+      deltaEl.className = `stat-delta stat-delta-sm ${
+        info.pct == null ? "" : pctClass(info.pct)
+      }`.trim();
+    }
+
+    if (noteEl) {
+      noteEl.textContent = info.pct == null ? "" : "за 12 мес.";
+    }
+
+    if (labelEl) {
+      labelEl.textContent =
+        `${fmtMonthRu(DATA.months[info.idx]).toLowerCase()}, ${taxText}`;
+    }
+  });
 }
 
 
@@ -779,6 +869,17 @@ async function init() {
         state.mode = value;
         updatePercentHint();
         render();
+      }
+    );
+
+    /*
+     * Переключатель региона в блоке «Зарплата».
+     */
+    wireSegmented(
+      "salaryRegionToggle",
+      (value) => {
+        salaryRegion = value;
+        renderMedianBlock();
       }
     );
 
@@ -1059,27 +1160,8 @@ async function init() {
   }
 
 
-  /* ----- 2. Блок «Медианная ЗП, Минск» ---------------------- */
-  if (typeof renderMedianBlock === "function") {
-    window.renderMedianBlock = function () {
-      var values = DATA.series[MEDIAN_MINSK_KEY];
-      var valueEl = document.getElementById("medianValue");
-      var labelEl = document.getElementById("medianMonthLabel");
-
-      if (!Array.isArray(values) || !valueEl) return;
-
-      var idx = values.length - 1;
-      while (idx >= 0 && !isNum(values[idx])) idx--;
-      if (idx < 0) return;
-
-      valueEl.textContent = formatNumber(Tax.apply(values[idx]), 0);
-
-      if (labelEl) {
-        labelEl.textContent =
-          fmtMonthRu(DATA.months[idx]).toLowerCase() + ", " + Tax.label();
-      }
-    };
-  }
+  /* ----- 2. Блок «Зарплата» --------------------------------
+     renderMedianBlock (выше) сам берёт режим из window.Tax.      */
 
 
   /* ----- 3. Ссылка на график: добавляем режим --------------- */
@@ -1148,7 +1230,8 @@ async function init() {
 /* ============================================================
    Блок «Распределение доходов»
    Данные: data_salary.json (распределение) и data.json (медиана).
-   Самодостаточный блок: не использует функции остального кода.
+   Почти самодостаточный блок: из остального кода использует только
+   wireInfoTip (кнопка «i»).
    Режим налогов берётся из блока «Налоги» (window.Tax); без него —
    значения показываются как есть (до вычета).
    ============================================================ */
@@ -1251,12 +1334,68 @@ async function init() {
     grid.appendChild(cell);
   }
 
+  /* Подпись интервала дохода (границы — в текущем режиме налогов). */
+  function binLabel(bin) {
+    if (bin.from === 0) return "< " + fmt(money(bin.to));
+    if (bin.to == null) return "> " + fmt(money(bin.from));
+    return fmt(money(bin.from)) + "–" + fmt(money(bin.to));
+  }
+
+  /* Подсказка «i»: все интервалы распределения из data_salary.json. */
+  function renderInfo(info) {
+    var tip = document.getElementById("incomeInfoTip");
+    if (!tip) return;
+
+    tip.innerHTML = "";
+
+    var head = document.createElement("div");
+    head.className = "inc-info-head";
+
+    var title = document.createElement("div");
+    title.textContent = "Все интервалы дохода, " + info.name +
+      (info.period && info.period.label ? ", " + info.period.label : "");
+
+    var meta = document.createElement("div");
+    meta.className = "is-muted";
+    meta.textContent = taxLabel() + ". Работников всего: " + fmt(info.total);
+
+    head.appendChild(title);
+    head.appendChild(meta);
+    tip.appendChild(head);
+
+    var table = document.createElement("div");
+    table.className = "inc-table";
+
+    function cell(text, cls) {
+      var el = document.createElement("span");
+      el.textContent = text;
+      if (cls) el.className = cls;
+      table.appendChild(el);
+    }
+
+    cell("Доход, BYN", "is-head");
+    cell("в интервале", "is-head");
+    cell("этот доход и выше", "is-head");
+    cell("человек", "is-head");
+
+    info.bins.forEach(function (bin) {
+      cell(binLabel(bin));
+      cell(fmtShare(bin.share));
+      cell(fmtShare(bin.share_from));
+      cell(fmt(bin.workers));
+    });
+
+    tip.appendChild(table);
+  }
+
   function render() {
     var info = SALARY && SALARY.regions && SALARY.regions[region];
 
     grid.innerHTML = "";
 
     if (!info) return;
+
+    renderInfo(info);
 
     if (periodEl) {
       periodEl.textContent = info.period && info.period.label
@@ -1302,6 +1441,9 @@ async function init() {
 
   /* Смена режима «до / после вычета» (блок «Налоги»). */
   document.addEventListener("taxmodechange", render);
+
+  /* Подсказка «i» (wireInfoTip объявлена выше в этом файле). */
+  wireInfoTip("incomeInfoWrap", "incomeInfoBtn", "incomeInfoTip");
 
   function loadJson(url) {
     return fetch(url, { cache: "no-cache" }).then(function (response) {

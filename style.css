@@ -910,3 +910,98 @@ input[type="checkbox"]:focus-visible {
   .tax-switch .segmented { max-width: 100%; }
   .tax-switch .segmented-btn { padding: 0 10px; font-size: 13px; }
 }
+
+
+/* ============================================================
+   Стрелки сворачивания панелей: всегда сразу после заголовка,
+   кнопки («Очистить», «Выбрать все») — справа
+   ============================================================ */
+.controls-summary > span { order: 0; }
+.controls-summary::after { order: 1; }
+.controls-summary > .btn-clear,
+.controls-summary > .controls-actions { order: 2; margin-left: auto; }
+
+
+/* ============================================================
+   Верхние блоки: прогноз курса, зарплата, подсказки
+   ============================================================ */
+.stat-forecast-value {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+}
+
+.info-tip-row.is-excluded span { text-decoration: line-through; }
+.info-tip-row.is-excluded { color: var(--text-tertiary); }
+
+.stat-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.stat-main { flex-wrap: wrap; }
+
+.salary-row { margin-top: 14px; }
+.salary-row + .salary-row {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.salary-label {
+  margin-bottom: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.salary-row .stat-value { font-size: 26px; }
+
+.stat-delta-sm { margin-left: 4px; font-size: 14px; }
+
+.stat-note {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* Подсказка распределения доходов: во всю ширину карточки, с прокруткой. */
+.info-wrap.is-static { position: static; }
+
+.info-tip-wide {
+  top: 62px;
+  left: 12px;
+  right: 12px;
+  width: auto;
+  max-width: none;
+  max-height: min(70vh, 440px);
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+.inc-info-head { margin-bottom: 8px; line-height: 1.4; }
+.inc-info-head .is-muted { color: var(--text-tertiary); font-size: 12px; }
+
+.inc-table {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 3px 10px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.inc-table > span { text-align: right; white-space: nowrap; }
+.inc-table > span:nth-child(4n+1) { text-align: left; }
+
+.inc-table > .is-head {
+  position: sticky;
+  top: 0;
+  padding-bottom: 4px;
+  background: var(--bg-raised);
+  color: var(--text-tertiary);
+  white-space: normal;
+  line-height: 1.2;
+}

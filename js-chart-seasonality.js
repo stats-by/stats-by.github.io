@@ -16,15 +16,18 @@
 "use strict";
 
 
-/* Для курса USD год-аномалия не входит в среднее и показывается зачёркнутым. */
+/* Для курса USD месяцы-аномалии (2022, фев–май) не входят в медиану и зачёркнуты. */
 function isSeasonalityExcluded(param) {
-  return state.seasonalityKey === RATE_KEY &&
-    isExcludedRateYear(param.seriesName);
+  if (state.seasonalityKey !== RATE_KEY) return false;
+
+  const month = String(Number(param.dataIndex) + 1).padStart(2, "0");
+
+  return isExcludedRateMonth(`${param.seriesName}-${month}`);
 }
 
 
 /*
- * HTML заголовка тултипа сезонности: «Октябрь среднее: +1,4%».
+ * HTML заголовка тултипа сезонности: «Октябрь медиана: +1,4%».
  */
 function buildSeasonalityAverageHtml(monthName, validParams, meta) {
   const values = validParams
@@ -37,26 +40,25 @@ function buildSeasonalityAverageHtml(monthName, validParams, meta) {
       )
     );
 
-  const average =
-    values.reduce((sum, value) => sum + value, 0) / values.length;
+  const average = median(values);
   const percentMode = state.seasonalityMode === "percent";
 
-  let valueText;
+  let valueText = "—";
   let valueColor = "var(--text-primary)";
 
-  if (percentMode) {
+  if (average != null && percentMode) {
     valueText = formatPercentChange(average);
     const rounded = Math.round((average - 100) * 10) / 10;
     if (rounded > 0) valueColor = "var(--up)";
     if (rounded < 0) valueColor = "var(--down)";
-  } else {
+  } else if (average != null) {
     valueText = formatValue(average, meta, false);
   }
 
   return `
     <div class="tt-header">
       <span class="tt-date">${monthName}</span>
-      <span class="tt-avg-label">среднее:</span>
+      <span class="tt-avg-label">медиана:</span>
       <span class="tt-avg-val" style="color:${valueColor};">${valueText}</span>
     </div>
   `;
@@ -246,9 +248,7 @@ function buildSeasonalityCheckboxPanel() {
 
   container.innerHTML = "";
 
-  const metas = sortMetas(getSeriesMeta()).filter(
-    (meta) => getGroupLabel(meta) !== "Строительство"
-  );
+  const metas = sortMetas(getSeriesMeta()).filter(isSeasonalityMeta);
   let currentGroup = null;
 
   metas.forEach((meta, index) => {
