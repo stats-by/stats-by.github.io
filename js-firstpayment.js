@@ -63,7 +63,9 @@
   /* ----- Подготовка данных ---------------------------------- */
   function prepare(D) {
     var S = D.series, M = D.months, K = CFG.KEY;
-    var end = lastIdx(S[K.prices[0]], M.length - 1);      /* последний месяц с ценами на квартиры */
+    /* Конец периода накоплений — последний месяц с данными БПМ.
+       По остальным показателям берём последнее известное значение (fill тянет его вперёд). */
+    var end = lastIdx(S[K.bpm], M.length - 1);
     var start = 0;                                     /* первая публикация медианной ЗП по Минску */
     while (start < M.length && num(S[K.median][start]) == null) start++;
     var rate = fill(S[K.rate], end);
@@ -94,7 +96,16 @@
       var i = lastIdx(S[key], end);
       return i < 0 ? null : Number(S[key][i]);
     });
+    var priceLast = Math.max.apply(null, K.prices.map(function (key) { return lastIdx(S[key], end); }));
+    var last = {
+      bpm: M[end],
+      rate: M[lastIdx(S[K.rate], end)],
+      price: M[priceLast],
+      rent: M[lastIdx(ts, end)],
+      avg: M[lastIdx(S[K.avg], end)]
+    };
     return {
+      last: last,
       months: M, start: start, end: end, rate: rate, refi: refi, med: med, bpm: bpm,
       rentByn: rentUsd.map(function (v, i) { return v == null || !rate[i] ? 0 : v * rate[i]; }),
       avg: avg, rentK: rentK, rentN: ratios2.length, firstTs: M[firstTs],
@@ -379,7 +390,8 @@
       : "медианная ЗП по Минску после вычета налогов (между майскими и ноябрьскими публикациями линейно, после последней, " + P.lastMedian +
         ", — средняя ЗП × " + fmt(P.k, 3) + ": средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек)";
     root.querySelector("#fpNote").textContent =
-      "Расчёт на " + P.months[P.end] + " (последний месяц с ценами на квартиры). Доход — " + incomeText + ". Расходы — " +
+      "Расчёт на " + P.months[P.end] + " (последний месяц с данными БПМ). Остальные данные — за последний доступный месяц: курс USD — " + P.last.rate +
+      ", цены м² — " + P.last.price + ", аренда — " + P.last.rent + ", средняя ЗП — " + P.last.avg + "; если за расчётный месяц данных нет, считаем, что они не изменились. Доход — " + incomeText + ". Расходы — " +
       fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (бюджет прожиточного минимума на каждый месяц из данных сайта). Цена — средняя цена м² " + roomWord + " квартир Wikidom × площадь. " +
       "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + P.firstTs +
       ", где их нет, — данные Realt, уменьшенные в " + fmt(P.rentK, 2) + " раза (средний разрыв Realt и t-s.by в " + CFG.RENT_FROM + "–" + CFG.RENT_TO + ", " +

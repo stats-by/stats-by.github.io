@@ -179,6 +179,51 @@ function buildSeasonalityYearsPanel() {
     row.appendChild(text);
     container.appendChild(row);
   });
+
+  updateSeasonalityYearsLayout();
+  wireSeasonalityYearsResize(container);
+}
+
+
+/*
+ * Число строк в панели «Годы» считаем по ширине: сколько столбцов
+ * (колонок фиксированной ширины) помещается, столько и делаем,
+ * строк — столько, чтобы вместить все годы.
+ */
+function updateSeasonalityYearsLayout() {
+  const container = document.getElementById("seasonalityYearsList");
+
+  if (!container) return;
+
+  const count = container.children.length;
+  const width = container.clientWidth;
+
+  /* Панель свёрнута (ширина 0) — посчитаем, когда раскроют. */
+  if (!count || !width) return;
+
+  const styles = getComputedStyle(container);
+  const colWidth = parseFloat(styles.gridAutoColumns) || 120;
+  const gap = parseFloat(styles.columnGap) || 0;
+
+  const columns = Math.max(1, Math.floor((width + gap) / (colWidth + gap)));
+  const rows = Math.max(1, Math.ceil(count / columns));
+
+  container.style.setProperty("--years-rows", String(rows));
+}
+
+
+let seasonalityYearsResizeWired = false;
+
+function wireSeasonalityYearsResize(container) {
+  if (seasonalityYearsResizeWired) return;
+
+  seasonalityYearsResizeWired = true;
+
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(updateSeasonalityYearsLayout).observe(container);
+  }
+
+  window.addEventListener("resize", updateSeasonalityYearsLayout);
 }
 
 
