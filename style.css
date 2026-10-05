@@ -1,0 +1,912 @@
+/* ============================================================
+   Design tokens (DefiLlama, dark)
+   ============================================================ */
+:root {
+  /* surfaces */
+  --bg: #090b0c;
+  --bg-panel: #131516;
+  --bg-raised: #181a1b;
+  --bg-raised-2: #232628;
+
+  /* text */
+  --text-primary: #ffffff;
+  --text-secondary: #c6c6c6;
+  --text-tertiary: #878787;
+  --link: #4b86db;
+  --link-on-chip: #6a9be0;
+
+  /* borders (translucent white) */
+  --border-very-subtle: #ffffff08;
+  --border-subtle: #ffffff0f;
+  --border: #ffffff1f;
+  --border-strong: #ffffff29;
+
+  /* accent */
+  --accent: #1f67d2;
+  --accent-soft: #1f67d233;
+  --accent-weak: #1f67d21f;
+  --hover: #ffffff0f;
+  --up: #3eb84f;
+  --down: #e24a42;
+
+  /* series colors (используются в js-core.js — не менять) */
+  --c-median-country: #F2B84B;
+  --c-avg-country:    #F0793C;
+  --c-avg-minsk:      #E14F63;
+  --c-rate:           #3DDC84;
+  --c-price-1k:       #4FC3E8;
+  --c-price-2k:       #4C93E0;
+  --c-price-3k:       #7B7FE8;
+  --c-price-4k:       #A66FE0;
+
+  /* маркеры событий: к — красный, з — зелёный, с — синий, ж — жёлтый */
+  --event-red:    #e24a42;
+  --event-green:  #3eb84f;
+  --event-blue:   #4b86db;
+  --event-yellow: #f2b84b;
+
+  /* type */
+  --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas, "Liberation Mono", monospace;
+
+  /* radii */
+  --r-sm: 6px;
+  --r-md: 8px;
+  --r-lg: 12px;
+  --r-xl: 16px;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  line-height: 1.43;
+}
+
+button { font-family: inherit; }
+
+.page {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+}
+
+/* ============================================================
+   Header / footer
+   ============================================================ */
+.site-header {
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.site-header h1 {
+  margin: 0;
+  text-align: center;
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+}
+
+.site-footer {
+  margin-top: 20px;
+  padding-top: 16px;
+}
+
+.site-footer p {
+  margin: 0;
+  max-width: 80ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+   Dashboard layout
+   ============================================================ */
+.dashboard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 16px;
+  align-items: start;
+}
+
+.seasonality-controls { grid-column: 2; grid-row: 2; }
+.seasonality-years-controls { grid-column: 1; grid-row: 3; }
+
+/* ============================================================
+   Card
+   ============================================================ */
+.chart-section {
+  min-width: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 20px 20px 8px;
+}
+
+.chart-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.chart-title {
+  flex: 1;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.deep-link-button {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.deep-link-button:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.deep-link-button svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chart,
+.seasonality-chart {
+  width: 100%;
+  height: 520px;
+}
+
+.hint {
+  margin: 0;
+  padding: 8px 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================
+   Tabs: segmented control + period presets
+   ============================================================ */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.segmented,
+.zoom-presets {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+}
+
+.segmented-btn,
+.zoom-preset-btn {
+  appearance: none;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.segmented-btn:hover,
+.zoom-preset-btn:hover {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.segmented-btn.is-active,
+.zoom-preset-btn.is-active {
+  background: var(--accent-soft);
+  color: var(--link-on-chip);
+}
+
+.zoom-presets { flex: 0 1 auto; min-width: 0; }
+
+.segmented-btn:focus-visible,
+.zoom-preset-btn:focus-visible,
+.btn-clear:focus-visible,
+.deep-link-button:focus-visible,
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ============================================================
+   Controls panels (чекбоксы)
+   ============================================================ */
+.controls {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 0 16px 16px;
+}
+
+.controls-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 0 12px;
+  list-style: none;
+  cursor: default;
+  pointer-events: none;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.controls-summary::-webkit-details-marker { display: none; }
+.controls-summary::marker { content: ""; }
+
+.controls-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.btn-clear {
+  appearance: none;
+  margin-left: auto;
+  min-height: 32px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background-color .15s ease;
+}
+
+.controls-actions .btn-clear { margin-left: 0; }
+
+.btn-clear:hover { background: var(--hover); }
+
+.controls-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+  padding: 1px 6px;
+  border-radius: var(--r-sm);
+  cursor: pointer;
+}
+
+.check-row:hover { background: var(--hover); }
+
+.check-row input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+.check-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.check-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  color: var(--text-primary);
+  user-select: none;
+}
+
+.check-group-label {
+  padding: 10px 6px 4px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.33;
+  color: var(--text-tertiary);
+}
+
+.check-group-label:first-child { padding-top: 4px; }
+
+.seasonality-years-list {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-rows: repeat(6, 22px);
+  grid-auto-columns: 120px;
+  column-gap: 12px;
+  align-items: center;
+  justify-content: start;
+}
+
+/* ============================================================
+   ECharts tooltip (HTML из formatter) — в стиле DefiLlama
+   ============================================================ */
+.tt-header,
+.tt-list {
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.05;
+  color: var(--text-primary);
+}
+
+.tt-header {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.tt-date,
+.tt-avg-label {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.tt-avg-val {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.tt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  white-space: nowrap;
+  transition: opacity .15s ease;
+}
+
+.tt-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--row-color, currentColor);
+  transition: transform .15s ease;
+}
+
+.tt-name {
+  flex: 1;
+  color: var(--text-primary);
+}
+
+.tt-val {
+  margin-left: 16px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.tt-list.has-active .tt-row:not(.is-active) { opacity: .38; }
+
+.tt-row.is-active { opacity: 1 !important; }
+.tt-row.is-active .tt-dot { transform: scale(1.2); }
+.tt-row.is-active .tt-name,
+.tt-row.is-active .tt-val { font-weight: 700; }
+
+/* ============================================================
+   События на первом графике (маркеры под осью X)
+   ============================================================
+   Слой лежит поверх графика и сам не перехватывает мышь —
+   только маркеры (pointer-events: auto). Положение маркеров
+   считает js-chart-main.js (layoutEvents) из позиции месяцев на оси.
+   ============================================================ */
+.chart-wrap {
+  position: relative;
+}
+
+.events-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.event-marker {
+  --ev: var(--event-blue);
+
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  appearance: none;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-raised-2);
+  border-color: color-mix(in srgb, var(--ev) 55%, transparent);
+  background: color-mix(in srgb, var(--ev) 24%, var(--bg-panel));
+  color: color-mix(in srgb, var(--ev) 60%, #ffffff);
+  cursor: pointer;
+  pointer-events: auto;
+  z-index: 2;
+  transform: translate(-50%, -50%);
+  transition: transform .15s ease, box-shadow .15s ease, background-color .15s ease, border-color .15s ease;
+}
+
+.event-marker[hidden] { display: none; }
+
+/* Зона нажатия больше самого значка — удобно пальцем. */
+.event-marker::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+}
+
+.event-marker svg {
+  width: 12px;
+  height: 12px;
+  fill: currentColor;
+  pointer-events: none;
+}
+
+.event-marker.is-red    { --ev: var(--event-red); }
+.event-marker.is-green  { --ev: var(--event-green); }
+.event-marker.is-blue   { --ev: var(--event-blue); }
+.event-marker.is-yellow { --ev: var(--event-yellow); }
+
+/* Наведение: чуть крупнее и слегка подсвечен. */
+.event-marker:hover,
+.event-marker.is-active {
+  z-index: 3;
+  transform: translate(-50%, -50%) scale(1.12);
+  border-color: color-mix(in srgb, var(--ev) 85%, transparent);
+  background: color-mix(in srgb, var(--ev) 38%, var(--bg-panel));
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--ev) 16%, transparent),
+    0 0 10px color-mix(in srgb, var(--ev) 30%, transparent);
+}
+
+.event-marker:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Пунктирная вертикальная линия при наведении на маркер. */
+.event-line {
+  position: absolute;
+  width: 0;
+  z-index: 1;
+  border-left: 1px dashed rgba(255, 255, 255, 0.5);
+  pointer-events: none;
+}
+
+.event-line[hidden] { display: none; }
+
+/* Тултип события — в стиле тултипов графика. */
+.event-tip {
+  position: absolute;
+  z-index: 4;
+  width: max-content;
+  max-width: 260px;
+  padding: 12px 16px;
+  background: var(--bg-raised);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-ui);
+  pointer-events: none;
+}
+
+.event-tip[hidden] { display: none; }
+
+.event-tip-date {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
+}
+
+.event-tip-text {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   Верхние блоки (над графиками)
+   ============================================================ */
+.top-blocks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.stat-card {
+  position: relative;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+  padding: 20px;
+}
+
+.stat-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.stat-main {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-unit {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+}
+
+.stat-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.stat-forecast {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stat-forecast-label {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.stat-forecast-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.stat-delta {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-delta.is-up { color: var(--up); }
+.stat-delta.is-down { color: var(--down); }
+
+/* Круглая кнопка «i» и всплывающая подсказка */
+.info-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.info-btn {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.info-btn:hover,
+.info-btn.is-active {
+  background: var(--hover);
+  color: var(--text-primary);
+}
+
+.info-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.info-tip {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  left: -8px;
+  width: max-content;
+  max-width: 260px;
+  padding: 12px 16px;
+  background: var(--bg-raised);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--r-md);
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-primary);
+  pointer-events: none;
+}
+
+.info-tip[hidden] { display: none; }
+
+.info-tip-title { margin-bottom: 8px; }
+
+.info-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+}
+
+.info-tip-row .is-up { color: var(--up); }
+.info-tip-row .is-down { color: var(--down); }
+
+/* Год, исключённый из среднего (курс USD, 2022). */
+.info-tip-row.is-excluded,
+.tt-row.is-excluded .tt-name,
+.tt-row.is-excluded .tt-val {
+  text-decoration: line-through;
+}
+
+@media (max-width: 900px) {
+  .top-blocks { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 28px; }
+}
+
+/* ============================================================
+   Tablet / mobile
+   ============================================================ */
+@media (max-width: 900px) {
+  .page { padding: 12px 8px 24px; }
+
+  .site-header { margin-bottom: 12px; padding-bottom: 12px; }
+  .site-header h1 { font-size: 24px; }
+
+  .dashboard { grid-template-columns: 1fr; gap: 12px; }
+
+  .seasonality-controls,
+  .seasonality-years-controls { grid-column: 1; grid-row: auto; }
+
+  .chart,
+  .seasonality-chart { height: 400px; }
+
+  .seasonality-years-list { grid-auto-columns: 110px; }
+
+  .controls-summary { cursor: pointer; pointer-events: auto; gap: 8px; }
+
+  .controls-summary::after {
+    content: "▾";
+    font-size: 12px;
+    color: var(--text-tertiary);
+    transition: transform .15s ease;
+  }
+
+  .controls[open] .controls-summary::after { transform: rotate(180deg); }
+
+  .btn-clear { min-height: 36px; }
+}
+
+@media (max-width: 520px) {
+  .page { padding: 8px 8px 20px; }
+
+  .site-header h1 { font-size: 22px; }
+
+  .chart-section { padding: 12px 12px 4px; }
+  .chart-head { gap: 6px; margin-bottom: 10px; }
+  .chart-title { font-size: 18px; line-height: 1.22; }
+
+  .chart,
+  .seasonality-chart { height: 340px; }
+
+  .deep-link-button { width: 32px; height: 32px; }
+
+  .zoom-presets { flex: 1; }
+
+  .segmented,
+  .zoom-presets { padding: 2px; border-radius: var(--r-lg); }
+
+  .segmented-btn,
+  .zoom-preset-btn { padding: 0 8px; font-size: 13px; }
+
+  .zoom-preset-btn { flex: 1 1 auto; padding: 0 4px; }
+
+  .seasonality-years-list { grid-auto-columns: 100px; }
+
+  .controls-actions { gap: 4px; }
+  .controls-actions .btn-clear { padding: 4px 8px; }
+
+  .event-tip { max-width: 220px; padding: 10px 12px; }
+}
+
+@media (max-width: 380px) {
+  .zoom-preset-btn { font-size: 12px; padding: 0 3px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+
+
+/* ============================================================
+   Блок «Распределение доходов»
+   ============================================================ */
+.stat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.stat-head .stat-title { margin: 0; }
+
+.segmented-sm { padding: 2px; border-radius: var(--r-md); }
+
+.segmented-sm .segmented-btn {
+  min-height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: var(--r-sm);
+}
+
+.income-period {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+}
+
+.income-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.income-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.income-pct {
+  min-width: 38px;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.income-thr {
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 380px) {
+  .income-grid { column-gap: 8px; }
+  .income-pct { font-size: 16px; min-width: 34px; }
+  .income-thr { font-size: 13px; }
+}
+
+
+/* ============================================================
+   Переключатель «до вычета / после вычета налогов»
+   ============================================================ */
+.tax-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 12px;
+  margin-top: 16px;
+}
+
+.tax-switch-label {
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 520px) {
+  .tax-switch { margin-top: 12px; }
+  .tax-switch-label { width: 100%; text-align: center; }
+  .tax-switch .segmented { max-width: 100%; }
+  .tax-switch .segmented-btn { padding: 0 10px; font-size: 13px; }
+}

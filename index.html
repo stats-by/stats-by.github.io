@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Минск в цифрах — дашборд</title>
+<meta name="description" content="Статистика экономических показателей Беларуси и Минска">
+<meta name="theme-color" content="#090b0c">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="firstpayment.css">
+</head>
+<body>
+
+<div class="page">
+
+  <header class="site-header">
+    <h1>Минск в цифрах</h1>
+
+    <!-- Общий переключатель налогов: влияет на все зарплаты на сайте (блок «Налоги» в js-app.js) -->
+    <div class="tax-switch">
+      <span class="tax-switch-label">Зарплаты и доходы:</span>
+      <div class="segmented" id="taxToggle" role="group" aria-label="Налоги">
+        <button type="button" class="segmented-btn" data-value="gross">До вычета налогов</button>
+        <button type="button" class="segmented-btn is-active" data-value="net">После вычета налогов</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="top-blocks" aria-label="Ключевые показатели">
+
+    <!-- Блок 1: курс доллара и прогноз по сезонности -->
+    <article class="stat-card" id="blockRate">
+      <h2 class="stat-title">Курс USD/BYN</h2>
+      <div class="stat-main">
+        <span class="stat-value" id="rateValue">—</span>
+        <span class="stat-unit">BYN</span>
+      </div>
+      <div class="stat-sub" id="rateMonthLabel"></div>
+
+      <div class="stat-forecast">
+        <div class="stat-forecast-label" id="rateForecastLabel">Прогноз</div>
+        <div class="stat-forecast-row">
+          <span class="stat-delta" id="rateForecastPct">—</span>
+          <span class="info-wrap" id="rateInfoWrap">
+            <button type="button" class="info-btn" id="rateInfoBtn" aria-label="Из чего считается прогноз" aria-describedby="rateInfoTip">i</button>
+            <div class="info-tip" id="rateInfoTip" role="tooltip" hidden></div>
+          </span>
+        </div>
+      </div>
+    </article>
+
+    <!-- Блок 2: медианная зарплата в Минске (временный, будет переделан) -->
+    <article class="stat-card" id="blockMedian">
+      <h2 class="stat-title">Медианная ЗП, Минск</h2>
+      <div class="stat-main">
+        <span class="stat-value" id="medianValue">—</span>
+        <span class="stat-unit">BYN</span>
+      </div>
+      <div class="stat-sub" id="medianMonthLabel"></div>
+    </article>
+
+    <!-- Блок 3: распределение доходов (js-app.js, data_salary.json) -->
+    <article class="stat-card" id="blockIncome">
+      <div class="stat-head">
+        <h2 class="stat-title">Распределение доходов</h2>
+        <div class="segmented segmented-sm" id="incomeRegionToggle" role="group" aria-label="Регион">
+          <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
+          <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>
+        </div>
+      </div>
+      <div class="income-period" id="incomePeriod"></div>
+      <div class="income-grid" id="incomeGrid"></div>
+    </article>
+
+  </section>
+
+  <main class="dashboard">
+
+    <section class="chart-section main-chart-section">
+
+      <div class="chart-head">
+        <div class="zoom-presets" id="zoomPresets" role="group" aria-label="Период графика">
+          <button type="button" class="zoom-preset-btn" data-value="1y">Год</button>
+          <button type="button" class="zoom-preset-btn" data-value="5y">5 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="10y">10 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="15y">15 лет</button>
+          <button type="button" class="zoom-preset-btn" data-value="all">Всё время</button>
+        </div>
+
+        <button type="button" class="deep-link-button" id="shareMainChart" aria-label="Скопировать ссылку на первый график" title="Скопировать ссылку">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+            <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="toolbar">
+        <div class="segmented" id="modeToggle" role="group" aria-label="Вид значений">
+          <button type="button" class="segmented-btn is-active" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn" data-value="percent">В процентах</button>
+        </div>
+
+        <div class="segmented" id="currencyToggle" role="group" aria-label="Валюта">
+          <button type="button" class="segmented-btn is-active" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn" data-value="USD">USD</button>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div id="chart" class="chart" role="img" aria-label="График зарплат, курса доллара и цены жилья по месяцам"></div>
+        <!-- Маркеры событий (events.json): строятся в js-chart-main.js -->
+        <div class="events-layer" id="eventsLayer"></div>
+      </div>
+      <p class="hint" id="percentHint" hidden>За 100% принят левый край выбранного диапазона — сдвиньте ползунок, чтобы изменить точку отсчёта.</p>
+
+    </section>
+
+    <details class="controls main-controls" id="controlsPanel" open>
+      <summary class="controls-summary">
+        <span>Показатели</span>
+        <button type="button" class="btn-clear" id="clearIndicators">Очистить</button>
+      </summary>
+      <div class="controls-body" id="checkboxList"></div>
+    </details>
+
+    <section class="chart-section seasonality-chart-section">
+
+      <div class="chart-head">
+        <h2 class="chart-title">График сезонности</h2>
+
+        <button type="button" class="deep-link-button" id="shareSeasonalityChart" aria-label="Скопировать ссылку на график сезонности" title="Скопировать ссылку">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+            <path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="toolbar">
+        <div class="segmented" id="seasonalityModeToggle" role="group" aria-label="Вид значений сезонности">
+          <button type="button" class="segmented-btn" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn is-active" data-value="percent">В процентах</button>
+        </div>
+
+        <div class="segmented" id="seasonalityCurrencyToggle" role="group" aria-label="Валюта сезонности">
+          <button type="button" class="segmented-btn" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn is-active" data-value="USD">USD</button>
+        </div>
+      </div>
+
+      <div id="seasonalityChart" class="seasonality-chart" role="img" aria-label="График сезонности выбранного показателя по месяцам разных лет"></div>
+
+    </section>
+
+    <details class="controls seasonality-years-controls" id="seasonalityYearsPanel" open>
+      <summary class="controls-summary">
+        <span>Годы</span>
+        <div class="controls-actions">
+          <button type="button" class="btn-clear" id="clearSeasonalityYears">Очистить</button>
+          <button type="button" class="btn-clear" id="selectAllSeasonalityYears">Выбрать все</button>
+        </div>
+      </summary>
+      <div class="controls-body seasonality-years-list" id="seasonalityYearsList"></div>
+    </details>
+
+    <details class="controls seasonality-controls" id="seasonalityControlsPanel" open>
+      <summary class="controls-summary">
+        <span>Показатели</span>
+      </summary>
+      <div class="controls-body" id="seasonalityCheckboxList"></div>
+    </details>
+
+  </main>
+
+  <!-- Блок «Первый взнос» (js-firstpayment.js сам рисует содержимое) -->
+  <section class="chart-section fp-section" id="fpRoot" aria-label="Первый взнос"></section>
+
+  <footer class="site-footer">
+    <p>Курс USD/BYN не пересчитывается переключателем валюты — он и есть коэффициент пересчёта. Если за отдельный месяц нет данных, соседние доступные точки соединяются напрямую.</p>
+    <p>Исходные данные по зарплатам и доходам — до вычета налогов. Режим «после вычета» — расчёт: вычитается взнос в ФСЗН 1% и подоходный налог 13% (итого × 0,8613), стандартные вычеты не учитываются.</p>
+  </footer>
+
+</div>
+
+<script src="./echarts.min.js"></script>
+<script src="js-core.js"></script>
+<script src="js-chart-main.js"></script>
+<script src="js-chart-seasonality.js"></script>
+<script src="js-app.js"></script>
+<script src="js-firstpayment.js"></script>
+</body>
+</html>
