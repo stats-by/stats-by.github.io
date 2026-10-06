@@ -117,6 +117,7 @@ const GROUP_ORDER = [
   "стоимость квартир Realt",
   "стоимость квартир Wikidom",
   "Ставка",
+  "Индексы",
 ];
 
 /*
@@ -164,6 +165,14 @@ const CHECKBOX_ORDER = [
   "wikidom_сделки_количество_сделок_новостройки_вторичка",
   "wikidom_сделки_количество_сделок_новостройки",
   "wikidom_сделки_количество_сделок_вторичка",
+
+  // Индексы
+  "idx_med_avg_minsk",
+  "idx_med_avg_by",
+  "idx_med_minsk_by",
+  "idx_med_m2",
+  "idx_avg_m2",
+  "idx_rent_med",
 ];
 
 
@@ -371,6 +380,14 @@ const SERIES_STYLE = {
   /* Строительство */
   "строительство_год_тыс": { color: "#C98B5B", dash: "solid" },
   "строительство_год":     { color: "#C98B5B", dash: "dashed" },
+
+  /* Индексы */
+  "idx_med_avg_minsk": { color: "#9BE15D", dash: "solid" },
+  "idx_med_avg_by":    { color: "#9BE15D", dash: "dashed" },
+  "idx_med_minsk_by":  { color: "#7FDBFF", dash: "solid" },
+  "idx_med_m2":        { color: "#FF8FA3", dash: "solid" },
+  "idx_avg_m2":        { color: "#FF8FA3", dash: "dashed" },
+  "idx_rent_med":      { color: "#E5E5E5", dash: "solid" },
 };
 
 
@@ -448,6 +465,7 @@ function getGroupLabel(meta) {
       rent: "Аренда",
       construction: "Строительство",
       refinancing: "Ставка",
+      index: "Индексы",
     };
 
     return groupMap[meta.group] || meta.group;
@@ -599,8 +617,8 @@ function validateData(data) {
    */
   data.series_meta.forEach((meta) => {
     if (meta.key === BPM_KEY) {
-      meta.label = "Бюджет прожиточного минимума (БПМ)";
-      meta.tooltip_label = "Прожиточный минимум (БПМ)";
+      meta.label = "Бюджет Прожиточного Минимума (БПМ)";
+      meta.tooltip_label = "прожиточный минимум (БПМ)";
       meta.group = "salary";
       meta.unit = "BYN";
       meta.currency = "BYN";
@@ -635,6 +653,8 @@ function validateData(data) {
       );
     }
   });
+
+  addDerivedIndices(data);
 }
 
 
@@ -759,6 +779,10 @@ function isAnnualSeries(meta) {
    ============================================================ */
 
 function getRawMonthlyValues(meta) {
+  if (meta && meta.derived) {
+    return getDerivedData(meta).values.slice();
+  }
+
   if (!meta || !DATA.series) {
     return [];
   }
@@ -869,6 +893,157 @@ const Tax = (function () {
     },
   };
 })();
+
+
+/* ============================================================
+   Индексы (производные ряды первого графика)
+   ============================================================
+   Считаются из рядов data.json на лету. Входные ряды линейно
+   интерполируются между публикациями (до первой и после последней
+   точки не продлеваются). Зарплаты в индексах 4–6 учитывают режим
+   налогов Tax; в индексах 1–3 налоги сокращаются. Переключатель
+   валюты на индексы не влияет.
+
+   real[i] = true, если в этом месяце опубликованы все входные ряды;
+   по нему график ставит маркеры и пометку «аппр.».
+   ============================================================ */
+
+const DERIVED_KEYS = {
+  medMinsk: "медианная_минск",
+  avgMinsk: "средняя_средняя_минск",
+  medBy: "медианная_беларусь",
+  avgBy: "средняя_средняя_по_стране",
+  rate: "курс_usd_курс_usd_byn",
+  price1: "realt_м2_стоимость_м2_однушек",
+  rent: "аренда_стоимость_аренды_t_s_by",
+};
+
+const DERIVED_INDEX_DEFS = [
+  {
+    key: "idx_med_avg_minsk",
+    label: "Медианная ЗП в % от средней, Минск",
+    unit: "%",
+    decimals: 1,
+    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.avgMinsk],
+    calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
+  },
+  {
+    key: "idx_med_avg_by",
+    label: "Медианная ЗП в % от средней, страна",
+    unit: "%",
+    decimals: 1,
+    inputs: [DERIVED_KEYS.medBy, DERIVED_KEYS.avgBy],
+    calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
+  },
+  {
+    key: "idx_med_minsk_by",
+    label: "Медианная ЗП: Минск в % от страны",
+    unit: "%",
+    decimals: 1,
+    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.medBy],
+    calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
+  },
+  {
+    key: "idx_med_m2",
+    label: "Медианная ЗП Минск, м\u00B2",
+    unit: "м\u00B2",
+    decimals: 2,
+    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
+    calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
+  },
+  {
+    key: "idx_avg_m2",
+    label: "Средняя ЗП Минск, м\u00B2",
+    unit: "м\u00B2",
+    decimals: 2,
+    inputs: [DERIVED_KEYS.avgMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
+    calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
+  },
+  {
+    key: "idx_rent_med",
+    label: "Аренда однушки в % от медианной ЗП",
+    unit: "%",
+    decimals: 0,
+    inputs: [DERIVED_KEYS.rent, DERIVED_KEYS.rate, DERIVED_KEYS.medMinsk],
+    calc: (v, f) => (v[2] ? ((v[0] * v[1]) / (v[2] * f)) * 100 : null),
+  },
+];
+
+function addDerivedIndices(data) {
+  DERIVED_INDEX_DEFS.forEach((def) => {
+    if (data.series_meta.some((meta) => meta.key === def.key)) return;
+
+    data.series_meta.push({
+      key: def.key,
+      label: def.label,
+      tooltip_label: def.label,
+      group: "index",
+      unit: def.unit,
+      decimals: def.decimals,
+      frequency: "monthly",
+      derived: true,
+    });
+  });
+}
+
+/* Линейная интерполяция между известными точками; real — исходные точки. */
+function interpolateLinearPlain(values, length) {
+  const out = new Array(length).fill(null);
+  const real = new Array(length).fill(false);
+  let prev = -1;
+
+  for (let i = 0; i < length; i++) {
+    if (!isNum(values[i])) continue;
+
+    out[i] = Number(values[i]);
+    real[i] = true;
+
+    if (prev >= 0 && i - prev > 1) {
+      for (let j = prev + 1; j < i; j++) {
+        out[j] = out[prev] + ((out[i] - out[prev]) * (j - prev)) / (i - prev);
+      }
+    }
+
+    prev = i;
+  }
+
+  return { vals: out, real };
+}
+
+const derivedCache = {};
+
+function getDerivedData(meta) {
+  const cacheKey = `${meta.key}|${Tax.getMode()}`;
+
+  if (derivedCache[cacheKey]) return derivedCache[cacheKey];
+
+  const def = DERIVED_INDEX_DEFS.find((item) => item.key === meta.key);
+  const length = DATA.months.length;
+  const values = new Array(length).fill(null);
+  const real = new Array(length).fill(false);
+
+  if (def) {
+    const inputs = def.inputs.map((key) =>
+      interpolateLinearPlain(DATA.series[key] || [], length)
+    );
+    const factor = Tax.isNet() ? Tax.factor : 1;
+
+    for (let i = 0; i < length; i++) {
+      if (!inputs.every((input) => input.vals[i] != null)) continue;
+
+      const value = def.calc(inputs.map((input) => input.vals[i]), factor);
+
+      if (value != null && Number.isFinite(value)) {
+        values[i] = value;
+        real[i] = inputs.every((input) => input.real[i]);
+      }
+    }
+  }
+
+  derivedCache[cacheKey] = { values, real };
+
+  return derivedCache[cacheKey];
+}
 
 
 /* ============================================================
@@ -1377,6 +1552,15 @@ function formatValue(value, meta, percentMode = false) {
 
   if (percentMode) {
     return `${formatNumber(number, 1)}%`;
+  }
+
+  /* Индексы: знаки после запятой и единица заданы в самом индексе. */
+  if (meta && meta.derived) {
+    const digits = meta.decimals == null ? 2 : meta.decimals;
+
+    return meta.unit === "%"
+      ? `${formatNumber(number, digits)}%`
+      : `${formatNumber(number, digits)} ${meta.unit}`;
   }
 
   if (isPercentSeries(meta)) {
@@ -1929,6 +2113,7 @@ const SEASONALITY_HIDDEN_KEYS = [
 
 function isSeasonalityMeta(meta) {
   return getGroupLabel(meta) !== "Строительство" &&
+    getGroupLabel(meta) !== "Индексы" &&
     !SEASONALITY_HIDDEN_KEYS.includes(meta.key);
 }
 

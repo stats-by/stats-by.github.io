@@ -201,6 +201,9 @@ function buildSeries() {
     const rawValues = getSeriesValues(meta);
     const shouldInterpolate = !isAnnualSeries(meta);
 
+    /* Индексы: маркеры и «аппр.» — по месяцам, где опубликованы все входные ряды. */
+    const realMask = meta.derived ? getDerivedData(meta).real : null;
+
     let values = shouldInterpolate
       ? interpolateMonthlyValues(rawValues)
       : rawValues.map((value) => {
@@ -213,6 +216,14 @@ function buildSeries() {
             isOriginal: true,
           };
         });
+
+    if (realMask) {
+      values = values.map((point, index) =>
+        point && !realMask[index]
+          ? { value: point.value, isOriginal: false }
+          : point
+      );
+    }
 
     if (state.mode === "percent") {
       values = normalizeSeriesPointsToPercent(values, baseIndex);
@@ -240,7 +251,8 @@ function buildSeries() {
     if (state.mode === "absolute") {
       if (
         isPercentSeries(meta) ||
-        isRateSeries(meta)
+        isRateSeries(meta) ||
+        meta.derived
       ) {
         yAxisIndex = 1;
       }
@@ -256,7 +268,11 @@ function buildSeries() {
     const showOriginalPoints =
       !NO_MARKER_KEYS.has(meta.key) &&
       (isAnnualSeries(meta) ||
-        isSparseMonthlySeries(rawValues));
+        isSparseMonthlySeries(
+          realMask
+            ? rawValues.map((value, index) => (realMask[index] ? value : null))
+            : rawValues
+        ));
 
     const hasInterpolatedValues = values.some(
       (point) => point && point.isOriginal === false
@@ -324,7 +340,8 @@ function buildSeries() {
 
       z: (
         isPercentSeries(meta) ||
-        isRateSeries(meta)
+        isRateSeries(meta) ||
+        meta.derived
       ) ? 5 : 3,
 
       /*
