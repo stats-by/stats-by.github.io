@@ -818,7 +818,7 @@ input[type="checkbox"]:focus-visible {
   .segmented-btn,
   .zoom-preset-btn { padding: 0 8px; font-size: 13px; }
 
-  .zoom-preset-btn { flex: 1 1 auto; padding: 0 4px; }
+  .zoom-preset-btn { flex: 1 1 auto; padding: 0 3px; font-size: 12px; }
 
   .seasonality-years-list { grid-auto-columns: 100px; }
 
@@ -829,7 +829,7 @@ input[type="checkbox"]:focus-visible {
 }
 
 @media (max-width: 380px) {
-  .zoom-preset-btn { font-size: 12px; padding: 0 3px; }
+  .zoom-preset-btn { font-size: 11px; padding: 0 2px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

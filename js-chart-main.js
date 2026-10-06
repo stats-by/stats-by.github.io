@@ -1554,8 +1554,12 @@ function getVisibleSeriesBounds() {
   let maxIndex = 0;
   let hasValue = false;
 
+  /* Самое позднее «первое значение» среди выбранных рядов. */
+  let commonStartIndex = -1;
+
   metas.forEach((meta) => {
     const values = getSeriesValues(meta);
+    let firstIndex = -1;
 
     values.forEach((value, index) => {
       if (
@@ -1566,9 +1570,14 @@ function getVisibleSeriesBounds() {
       }
 
       hasValue = true;
+      if (firstIndex < 0) firstIndex = index;
       minIndex = Math.min(minIndex, index);
       maxIndex = Math.max(maxIndex, index);
     });
+
+    if (firstIndex >= 0) {
+      commonStartIndex = Math.max(commonStartIndex, firstIndex);
+    }
   });
 
   if (!hasValue) {
@@ -1577,9 +1586,16 @@ function getVisibleSeriesBounds() {
 
   const denominator = Math.max(1, months.length - 1);
 
+  /* Хотя бы два месяца в окне, чтобы график не схлопнулся в точку. */
+  const commonIndex = Math.max(
+    minIndex,
+    Math.min(commonStartIndex, maxIndex - 1)
+  );
+
   return {
     start: (minIndex / denominator) * 100,
     end: (maxIndex / denominator) * 100,
+    commonStart: (commonIndex / denominator) * 100,
   };
 }
 
@@ -1599,6 +1615,10 @@ function setZoomByPreset(preset) {
     state.zoomEnd = 100;
   } else if (preset === "all") {
     state.zoomStart = bounds.start;
+    state.zoomEnd = bounds.end;
+  } else if (preset === "common") {
+    /* Левая граница — там, где начались ВСЕ выбранные ряды; правая — как у «Всё время». */
+    state.zoomStart = bounds.commonStart;
     state.zoomEnd = bounds.end;
   } else {
     const periodMonths = {
