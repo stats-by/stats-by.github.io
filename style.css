@@ -1000,26 +1000,32 @@ input[type="checkbox"]:focus-visible {
   max-height: min(70vh, 440px);
   overflow-y: auto;
   pointer-events: auto;
+  /* Без верхнего отступа: иначе над липкой шапкой таблицы остаётся щель,
+     через которую при прокрутке видны строки. Отступ перенесён в .inc-info-head. */
+  padding-top: 0;
 }
 
-.inc-info-head { margin-bottom: 8px; line-height: 1.4; }
+.inc-info-head { margin-bottom: 8px; padding-top: 12px; line-height: 1.4; }
 .inc-info-head .is-muted { color: var(--text-tertiary); font-size: 12px; }
 
 .inc-table {
   display: grid;
   grid-template-columns: 1.5fr 1fr 1fr 1fr;
-  gap: 3px 10px;
+  /* Без зазоров между ячейками: через них при прокрутке просвечивали бы строки
+     под липкой шапкой. Расстояния заданы padding ячеек. */
+  gap: 0;
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
-.inc-table > span { text-align: right; white-space: nowrap; }
+.inc-table > span { padding: 1.5px 5px; text-align: right; white-space: nowrap; }
 .inc-table > span:nth-child(4n+1) { text-align: left; }
 
 .inc-table > .is-head {
   position: sticky;
   top: 0;
-  padding-bottom: 4px;
+  z-index: 1;
+  padding-bottom: 5px;
   background: var(--bg-raised);
   color: var(--text-tertiary);
   white-space: normal;
