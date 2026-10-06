@@ -1,10 +1,17 @@
 {
   "version": 1,
-  "source": "events.xlsx",
+  "source": "data_events.xlsx",
   "sheets": {
-    "медианная": [
+    "события": [
       {
-        "date": "2011-03-01",
+        "date": "2008-08",
+        "month": "2008-08",
+        "color": "red",
+        "priority": null,
+        "text": "Конфликт в Южной Осетии и начало мирового финансового кризиса"
+      },
+      {
+        "date": "2011-03",
         "month": "2011-03",
         "color": "red",
         "priority": null,
@@ -16,6 +23,20 @@
         "color": "blue",
         "priority": null,
         "text": "Деноминация, отрезали 0000"
+      },
+      {
+        "date": "2020-02-27",
+        "month": "2020-02",
+        "color": "red",
+        "priority": null,
+        "text": "COVID-19 в Беларуси"
+      },
+      {
+        "date": "2022-02-24",
+        "month": "2022-02",
+        "color": "red",
+        "priority": null,
+        "text": "Начало конфликта"
       },
       {
         "date": "2026-08-13",
