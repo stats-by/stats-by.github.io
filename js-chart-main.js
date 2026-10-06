@@ -254,8 +254,9 @@ function buildSeries() {
      * ежемесячном ряду НЕ превращает его в точечный график.
      */
     const showOriginalPoints =
-      isAnnualSeries(meta) ||
-      isSparseMonthlySeries(rawValues);
+      !NO_MARKER_KEYS.has(meta.key) &&
+      (isAnnualSeries(meta) ||
+        isSparseMonthlySeries(rawValues));
 
     const hasInterpolatedValues = values.some(
       (point) => point && point.isOriginal === false
@@ -700,7 +701,7 @@ function buildTooltipFormatter(params) {
       getSeriesColor(meta, getStableSeriesIndex(meta));
 
     const valueText = state.mode === "percent"
-      ? formatPercentChange(rawValue)
+      ? formatChartPercent(rawValue)
       : formatValue(rawValue, meta, false);
 
     const isActive = Boolean(

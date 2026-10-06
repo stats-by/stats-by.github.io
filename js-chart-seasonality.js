@@ -47,7 +47,7 @@ function buildSeasonalityAverageHtml(monthName, validParams, meta) {
   let valueColor = "var(--text-primary)";
 
   if (average != null && percentMode) {
-    valueText = formatPercentChange(average);
+    valueText = formatChartPercent(average);
     const rounded = Math.round((average - 100) * 10) / 10;
     if (rounded > 0) valueColor = "var(--up)";
     if (rounded < 0) valueColor = "var(--down)";
@@ -355,7 +355,8 @@ function getSeasonalitySeries(meta) {
        * Все 12 месяцев отдаём в график целиком: видимое окно задаёт
        * dataZoom-слайдер. Интерполируем только пропуски внутри года.
        */
-      const showOriginalPoints = isSparseMonthlySeries(data);
+      const showOriginalPoints =
+        !NO_MARKER_KEYS.has(meta.key) && isSparseMonthlySeries(data);
       let seriesData = interpolateMonthlyValues(data);
 
       if (state.seasonalityMode === "percent") {
@@ -496,7 +497,7 @@ function buildSeasonalityTooltipFormatter(params) {
 
     const color = param.color || "#3DDC84";
     const valueText = state.seasonalityMode === "percent"
-      ? formatPercentChange(value)
+      ? formatChartPercent(value)
       : formatValue(value, meta, false);
 
     html += `

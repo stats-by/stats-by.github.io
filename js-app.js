@@ -1223,11 +1223,22 @@ document.addEventListener("taxmodechange", (event) => {
     grid.appendChild(cell);
   }
 
+  /* Тултип: > 100 — целые, 10…100 — 0,0, до 10 — 0,00. */
+  function fmtSmart(n) {
+    var a = Math.abs(Number(n));
+    return fmt(n, a > 100 ? 0 : a >= 10 ? 1 : 2);
+  }
+
+  /* Доля в тултипе: от 10% — один знак, меньше 10% — два. */
+  function fmtShareTip(share) {
+    return fmtSmart(share) + "%";
+  }
+
   /* Подпись интервала дохода (границы — в текущем режиме налогов). */
   function binLabel(bin) {
-    if (bin.from === 0) return "< " + fmt(money(bin.to));
-    if (bin.to == null) return "> " + fmt(money(bin.from));
-    return fmt(money(bin.from)) + "–" + fmt(money(bin.to));
+    if (bin.from === 0) return "< " + fmtSmart(money(bin.to));
+    if (bin.to == null) return "> " + fmtSmart(money(bin.from));
+    return fmtSmart(money(bin.from)) + "–" + fmtSmart(money(bin.to));
   }
 
   /* Подсказка «i»: все интервалы распределения из data_salary.json. */
@@ -1269,8 +1280,8 @@ document.addEventListener("taxmodechange", (event) => {
 
     info.bins.forEach(function (bin) {
       cell(binLabel(bin));
-      cell(fmtShare(bin.share));
-      cell(fmtShare(bin.share_from));
+      cell(fmtShareTip(bin.share));
+      cell(fmtShareTip(bin.share_from));
       cell(fmt(bin.workers));
     });
 

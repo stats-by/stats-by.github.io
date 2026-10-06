@@ -374,6 +374,12 @@ const SERIES_STYLE = {
 };
 
 
+/* Ряды, на которых точки (маркеры) не рисуются никогда. */
+const NO_MARKER_KEYS = new Set([
+  "аренда_стоимость_аренды_t_s_by",
+]);
+
+
 /* Цвет ряда: из SERIES_STYLE, иначе — из общей палитры по индексу. */
 function getSeriesColor(meta, index) {
   const style = meta && SERIES_STYLE[meta.key];
@@ -542,6 +548,34 @@ async function loadData() {
    Проверка структуры data.json
    ============================================================ */
 
+/* «м2» -> «м²» (буква «м» и надстрочная двойка). */
+function fixSquare(text) {
+  return String(text).replace(/м2/g, "м\u00B2");
+}
+
+
+/*
+ * Подпись показателя: «м2» -> «м²» и первая буква строчная.
+ * Исключение — БПМ. Аббревиатуры («ЗП», «USD…») не трогаем.
+ */
+function fixLabel(text, key) {
+  if (text == null || text === "") return text;
+
+  const fixed = fixSquare(text);
+
+  if (key === BPM_KEY) return fixed;
+
+  const first = fixed.charAt(0);
+  const second = fixed.charAt(1);
+  const secondIsUpper = second !== "" && second !== second.toLowerCase();
+
+  if (first !== first.toLowerCase() && !secondIsUpper) {
+    return first.toLowerCase() + fixed.slice(1);
+  }
+
+  return fixed;
+}
+
 function validateData(data) {
   if (!data || typeof data !== "object") {
     throw new Error("data.json содержит некорректный JSON.");
@@ -570,6 +604,16 @@ function validateData(data) {
       meta.group = "salary";
       meta.unit = "BYN";
       meta.currency = "BYN";
+    }
+  });
+
+  /* Подписи: «м2» -> «м²», первая буква строчная (кроме БПМ). */
+  data.series_meta.forEach((meta) => {
+    meta.label = fixLabel(meta.label, meta.key);
+    meta.tooltip_label = fixLabel(meta.tooltip_label, meta.key);
+
+    if (meta.unit) {
+      meta.unit = fixSquare(meta.unit);
     }
   });
 
@@ -1394,6 +1438,31 @@ function formatPercentChange(value) {
 
   if (change > 0) return `+${text}%`;
   if (change < 0) return `−${text}%`;
+  return `${text}%`;
+}
+
+
+/*
+ * Изменение относительно базы для тултипов графиков.
+ * level — уровень (101,4 = +1,4%). Если уровень выше 120% или ниже 80% —
+ * изменение округляется до целых (+25%, −25%), иначе до 0,1 (+19,9%).
+ */
+function formatChartPercent(level) {
+  if (level == null || !Number.isFinite(Number(level))) {
+    return "—";
+  }
+
+  const n = Number(level);
+  const digits = n > 120 || n < 80 ? 0 : 1;
+  const k = Math.pow(10, digits);
+  const change = Math.round((n - 100) * k) / k;
+  const text = Math.abs(change).toLocaleString("ru-RU", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+
+  if (change > 0) return `+${text}%`;
+  if (change < 0) return `\u2212${text}%`;
   return `${text}%`;
 }
 
