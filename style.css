@@ -1031,3 +1031,67 @@ input[type="checkbox"]:focus-visible {
   white-space: normal;
   line-height: 1.2;
 }
+
+
+/* ============================================================
+   Компактные верхние блоки: курс и зарплата — по одной строке
+   ============================================================ */
+#blockRate .stat-title { margin-bottom: 8px; }
+
+.rate-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rate-row .stat-main { flex-wrap: nowrap; flex-shrink: 0; }
+
+.rate-row .stat-forecast {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
+  text-align: right;
+  min-width: 0;
+}
+
+.rate-row .stat-forecast-row { justify-content: flex-end; margin-top: 2px; }
+
+/* Подсказка у правого края карточки — раскрывается влево. */
+.rate-row .info-tip { left: auto; right: -8px; }
+
+.salary-row {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.salary-row + .salary-row { margin-top: 10px; padding-top: 10px; }
+
+.salary-side { min-width: 0; }
+.salary-side .salary-label { margin-bottom: 0; }
+.salary-side .stat-sub { margin-top: 0; }
+
+.salary-row .stat-main { flex-wrap: nowrap; gap: 6px; }
+
+.salary-change {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.salary-change .stat-delta-sm { margin-left: 0; }
+
+@media (max-width: 520px) {
+  .rate-row .stat-value { font-size: 26px; }
+  .rate-row .stat-delta { font-size: 17px; }
+  .salary-row { grid-template-columns: 84px minmax(0, 1fr) auto; gap: 8px; }
+  .salary-row .stat-value { font-size: 22px; }
+  .salary-side .stat-sub { font-size: 11px; }
+  /* «до / после вычета» на телефоне не пишем — режим виден в переключателе сверху */
+  .salary-tax { display: none; }
+}

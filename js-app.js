@@ -463,11 +463,11 @@ function renderRateBlock() {
 
   valueEl.textContent = formatNumber(forecast.baseValue, 3);
 
-  document.getElementById("rateMonthLabel").textContent =
-    `за ${fmtMonthRu(forecast.baseMonth).toLowerCase()}`;
+  document.getElementById("rateTitle").textContent =
+    `Средний курс за ${fmtMonthRu(forecast.baseMonth).toLowerCase()}`;
 
   document.getElementById("rateForecastLabel").textContent =
-    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()} (медиана)`;
+    `Прогноз на ${MONTH_NAMES_RU[forecast.nextMonthNumber - 1].toLowerCase()}`;
 
   const pctEl = document.getElementById("rateForecastPct");
   pctEl.textContent = formatPercentChange(100 + forecast.median);
@@ -643,8 +643,13 @@ function renderMedianBlock() {
     }
 
     if (labelEl) {
-      labelEl.textContent =
-        `${fmtMonthRu(DATA.months[info.idx]).toLowerCase()}, ${taxText}`;
+      /* «, после вычета налогов» — отдельный span: на телефоне скрыт (CSS). */
+      labelEl.textContent = fmtMonthRu(DATA.months[info.idx]).toLowerCase();
+
+      const taxEl = document.createElement("span");
+      taxEl.className = "salary-tax";
+      taxEl.textContent = `, ${taxText}`;
+      labelEl.appendChild(taxEl);
     }
   });
 }

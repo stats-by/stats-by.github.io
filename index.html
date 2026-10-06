@@ -30,22 +30,24 @@
 
     <!-- Блок 1: курс доллара и прогноз по сезонности -->
     <article class="stat-card" id="blockRate">
-      <h2 class="stat-title">Курс USD/BYN</h2>
-      <div class="stat-main">
-        <span class="stat-value" id="rateValue">—</span>
-        <span class="stat-unit">BYN</span>
-      </div>
-      <div class="stat-sub" id="rateMonthLabel"></div>
+      <h2 class="stat-title" id="rateTitle">Средний курс USD/BYN</h2>
 
-      <div class="stat-forecast">
-        <div class="stat-forecast-label" id="rateForecastLabel">Прогноз</div>
-        <div class="stat-forecast-row">
-          <span class="stat-delta" id="rateForecastPct">—</span>
-          <span class="stat-forecast-value" id="rateForecastValue"></span>
-          <span class="info-wrap" id="rateInfoWrap">
-            <button type="button" class="info-btn" id="rateInfoBtn" aria-label="Из чего считается прогноз" aria-describedby="rateInfoTip">i</button>
-            <div class="info-tip" id="rateInfoTip" role="tooltip" hidden></div>
-          </span>
+      <div class="rate-row">
+        <div class="stat-main">
+          <span class="stat-value" id="rateValue">—</span>
+          <span class="stat-unit">BYN</span>
+        </div>
+
+        <div class="stat-forecast">
+          <div class="stat-forecast-label" id="rateForecastLabel">Прогноз</div>
+          <div class="stat-forecast-row">
+            <span class="stat-delta" id="rateForecastPct">—</span>
+            <span class="stat-forecast-value" id="rateForecastValue"></span>
+            <span class="info-wrap" id="rateInfoWrap">
+              <button type="button" class="info-btn" id="rateInfoBtn" aria-label="Из чего считается прогноз" aria-describedby="rateInfoTip">i</button>
+              <div class="info-tip" id="rateInfoTip" role="tooltip" hidden></div>
+            </span>
+          </div>
         </div>
       </div>
     </article>
@@ -61,25 +63,33 @@
       </div>
 
       <div class="salary-row">
-        <div class="salary-label">Медианная</div>
+        <div class="salary-side">
+          <div class="salary-label">Медианная</div>
+          <div class="stat-sub" id="medianMonthLabel"></div>
+        </div>
         <div class="stat-main">
           <span class="stat-value" id="medianValue">—</span>
           <span class="stat-unit">BYN</span>
+        </div>
+        <div class="salary-change">
           <span class="stat-delta stat-delta-sm" id="medianDelta"></span>
           <span class="stat-note" id="medianNote"></span>
         </div>
-        <div class="stat-sub" id="medianMonthLabel"></div>
       </div>
 
       <div class="salary-row">
-        <div class="salary-label">Средняя</div>
+        <div class="salary-side">
+          <div class="salary-label">Средняя</div>
+          <div class="stat-sub" id="avgMonthLabel"></div>
+        </div>
         <div class="stat-main">
           <span class="stat-value" id="avgValue">—</span>
           <span class="stat-unit">BYN</span>
+        </div>
+        <div class="salary-change">
           <span class="stat-delta stat-delta-sm" id="avgDelta"></span>
           <span class="stat-note" id="avgNote"></span>
         </div>
-        <div class="stat-sub" id="avgMonthLabel"></div>
       </div>
     </article>
 

@@ -1850,6 +1850,12 @@ function median(values) {
 const SEASONALITY_HIDDEN_KEYS = [
   "медианная_беларусь",
   "медианная_минск",
+  BPM_KEY,
+  "мин_зп_минимальная_по_стране",
+  "realt_м2_стоимость_м2_трешек",
+  "realt_м2_стоимость_м2_четырешек",
+  "wikidom_м2_стоимость_м2_трешек",
+  "wikidom_м2_стоимость_м2_четырешек",
 ];
 
 function isSeasonalityMeta(meta) {
