@@ -547,22 +547,40 @@ function getInternalGroup(meta) {
    Загрузка data.json
    ============================================================ */
 
-async function loadData() {
-  const response = await fetch("./data.json", {
-    cache: "no-cache",
-  });
+/*
+ * data.json нужен нескольким блокам (графики, «Распределение доходов»,
+ * «Первый взнос»). Скачиваем и проверяем его один раз: все вызывающие
+ * получают один и тот же промис и один и тот же объект. Блоки данные
+ * не меняют (validateData один раз правит подписи и добавляет индексы).
+ * Если загрузка не удалась, кэш сбрасывается — следующий вызов попробует снова.
+ */
+let dataPromise = null;
 
-  if (!response.ok) {
-    throw new Error(
-      `Не удалось загрузить data.json: HTTP ${response.status}`
-    );
+function loadData() {
+  if (!dataPromise) {
+    dataPromise = (async () => {
+      const response = await fetch("./data.json", {
+        cache: "no-cache",
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Не удалось загрузить data.json: HTTP ${response.status}`
+        );
+      }
+
+      const data = await response.json();
+
+      validateData(data);
+
+      return data;
+    })().catch((error) => {
+      dataPromise = null;
+      throw error;
+    });
   }
 
-  const data = await response.json();
-
-  validateData(data);
-
-  return data;
+  return dataPromise;
 }
 
 

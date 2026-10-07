@@ -1349,7 +1349,7 @@ document.addEventListener("taxmodechange", (event) => {
 
   Promise.all([
     loadJson("./data_salary.json"),
-    loadJson("./data.json").catch(function (error) {
+    loadData().catch(function (error) {
       console.warn("data.json не загружен:", error);
       return null;
     })

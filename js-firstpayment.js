@@ -463,8 +463,8 @@
       "рефинансирования месяца (СР) + надбавка, ежемесячная капитализация. Без учёта инфляции и роста цен на жильё.";
   }
 
-  fetch("./data.json", { cache: "no-cache" })
-    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+  /* Общая загрузка data.json из js-core.js (файл скачивается один раз на весь сайт). */
+  loadData()
     .then(function (D) {
       var fromLink = restoreFromUrl();
       P = prepare(D); buildShell(); update();
