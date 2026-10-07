@@ -68,7 +68,7 @@ function parseDeepLinkList(value) {
   }
 
   return value
-    .split(",")
+    .split(/[,_]/)
     .map((item) => item.trim())
     .filter(Boolean);
 }
@@ -102,49 +102,41 @@ function getZoomPercentFromMonth(month) {
 
 
 function buildDeepLinkUrl(source) {
-  const url = new URL(window.location.href);
-  const params = new URLSearchParams();
-
-  params.set("g", source === "seasonality" ? "2" : "1");
+  const pairs = [["g", source === "seasonality" ? "2" : "1"]];
 
   if (source === "seasonality") {
-    params.set("s", state.seasonalityKey || "");
-    params.set(
-      "y",
-      Array.from(state.seasonalityYears)
-        .sort((a, b) => a - b)
-        .join(",")
-    );
-    params.set("c", state.seasonalityCurrency);
-    params.set("m", state.seasonalityMode);
-    params.set(
+    pairs.push(["s", state.seasonalityKey ? seriesId(state.seasonalityKey) : ""]);
+    pairs.push(["y", formatYearRanges(Array.from(state.seasonalityYears))]);
+    pairs.push(["c", state.seasonalityCurrency]);
+    pairs.push(["m", state.seasonalityMode]);
+    /* Месяцы в ссылке считаются с 1. */
+    pairs.push([
       "r",
-      `${state.seasonalityMonthStart},${state.seasonalityMonthEnd}`
-    );
+      `${state.seasonalityMonthStart + 1}-${state.seasonalityMonthEnd + 1}`,
+    ]);
   } else {
-    params.set(
+    pairs.push([
       "i",
       getSeriesMeta()
         .filter((meta) => state.visible[meta.key])
-        .map((meta) => meta.key)
-        .join(",")
-    );
-    params.set("c", state.currency);
-    params.set("m", state.mode);
+        .map((meta) => seriesId(meta.key))
+        .join("_"),
+    ]);
+    pairs.push(["c", state.currency]);
+    pairs.push(["m", state.mode]);
 
     const startMonth = getMonthFromZoomPercent(state.zoomStart);
     const endMonth = getMonthFromZoomPercent(state.zoomEnd);
 
     if (startMonth && endMonth) {
-      params.set("z", `${startMonth},${endMonth}`);
+      pairs.push(["z", `${startMonth}_${endMonth}`]);
     }
   }
 
   /* Режим налогов (читается в Tax, js-core.js, при загрузке страницы). */
-  params.set("t", Tax.getMode());
+  pairs.push(["t", Tax.getMode()]);
 
-  url.search = params.toString();
-  return url.toString();
+  return makeShareUrl(pairs);
 }
 
 
@@ -222,18 +214,18 @@ function restoreDeepLinkState() {
   const source = params.get("g");
 
   if (source === "1") {
-    const validKeys = new Set(getSeriesMeta().map((meta) => meta.key));
-    const keys = parseDeepLinkList(params.get("i"));
+    /* Нет ни одного известного ряда — остаётся набор по умолчанию. */
+    const keys = parseSeriesList(params.get("i"));
 
-    getSeriesMeta().forEach((meta) => {
-      state.visible[meta.key] = false;
-    });
+    if (keys.length) {
+      getSeriesMeta().forEach((meta) => {
+        state.visible[meta.key] = false;
+      });
 
-    keys.forEach((key) => {
-      if (validKeys.has(key)) {
+      keys.forEach((key) => {
         state.visible[key] = true;
-      }
-    });
+      });
+    }
 
     const currency = params.get("c");
     const mode = params.get("m");
@@ -272,12 +264,17 @@ function restoreDeepLinkState() {
         .filter(isSeasonalityMeta)
         .map((meta) => meta.key)
     );
-    const seasonalityKey = params.get("s");
+    const seasonalityParam = params.get("s");
 
-    if (seasonalityKey && validKeys.has(seasonalityKey)) {
-      state.seasonalityKey = seasonalityKey;
-    } else if (seasonalityKey === "") {
+    if (seasonalityParam === "") {
       state.seasonalityKey = null;
+    } else if (seasonalityParam) {
+      /* Неизвестный ID — остаётся показатель по умолчанию. */
+      const seasonalityKey = keyFromSeriesToken(seasonalityParam);
+
+      if (seasonalityKey && validKeys.has(seasonalityKey)) {
+        state.seasonalityKey = seasonalityKey;
+      }
     }
 
     const currency = params.get("c");
@@ -293,17 +290,15 @@ function restoreDeepLinkState() {
 
     const meta = metaByKey(state.seasonalityKey);
     const availableYears = new Set(getSeasonalityYears(meta));
-    const years = parseDeepLinkList(params.get("y"))
-      .map((year) => Number(year))
-      .filter((year) => Number.isInteger(year) && availableYears.has(year));
+    const years = parseYearRanges(params.get("y"))
+      .filter((year) => availableYears.has(year));
 
     state.seasonalityYears = new Set(years);
     state.seasonalityYearsInitialized = true;
 
-    const range = parseDeepLinkList(params.get("r"))
-      .map((value) => Number(value));
+    const range = parseMonthRange(params.get("r"));
 
-    if (range.length === 2 && range.every((value) => Number.isInteger(value))) {
+    if (range) {
       state.seasonalityMonthStart = Math.max(0, Math.min(11, range[0]));
       state.seasonalityMonthEnd = Math.max(
         state.seasonalityMonthStart,

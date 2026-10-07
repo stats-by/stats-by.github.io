@@ -2135,3 +2135,186 @@ function isSeasonalityMeta(meta) {
 function isNum(value) {
   return value != null && Number.isFinite(Number(value));
 }
+
+
+
+/* ============================================================
+   Deep Link: общие помощники ссылок
+   ============================================================
+   Формат ссылок (все блоки):
+     • списки и периоды разделены "_" (не запятой, чтобы не было %2C);
+     • ряды — короткие латинские ID (SERIES_IDS) вместо кириллических
+       ключей data.json (ключи в данных не меняются);
+     • годы сезонности — диапазоны: 2019-2021_2023-2026;
+     • месяцы сезонности — с 1: r=3-8;
+     • хвост #... в ссылку не попадает.
+   Старые ссылки (кириллические ключи, запятые, r=0,11, короткие
+   имена параметров «Первого взноса») продолжают открываться.
+   ============================================================ */
+
+const SERIES_IDS = {
+  "медианная_минск": "med-minsk",
+  "медианная_беларусь": "med-by",
+  "средняя_средняя_минск": "avg-minsk",
+  "средняя_средняя_по_стране": "avg-by",
+  "мин_зп_минимальная_по_стране": "min-wage",
+  [BPM_KEY]: "bpm",
+  "курс_usd_курс_usd_byn": "usd-rate",
+  "аренда_стоимость_аренды_t_s_by": "rent-ts",
+  "аренда_стоимость_аренды_realt": "rent-realt",
+  "realt_м2_стоимость_м2_однушек": "realt-1k",
+  "realt_м2_стоимость_м2_двушек": "realt-2k",
+  "realt_м2_стоимость_м2_трешек": "realt-3k",
+  "realt_м2_стоимость_м2_четырешек": "realt-4k",
+  "wikidom_м2_стоимость_м2_однушек": "wiki-1k",
+  "wikidom_м2_стоимость_м2_двушек": "wiki-2k",
+  "wikidom_м2_стоимость_м2_трешек": "wiki-3k",
+  "wikidom_м2_стоимость_м2_четырешек": "wiki-4k",
+  "wikidom_м2_стоимость_м2_общая": "wiki-all",
+  "realt_м2_объявления_новостройки": "realt-ads-new",
+  "realt_м2_объявления_вторичка": "realt-ads-sec",
+  "realt_м2_объявления_новостройки_вторичка": "realt-ads-all",
+  "realt_сделки_количество_сделок_новостройки_вторичка": "realt-deals",
+  "wikidom_сделки_количество_сделок_новостройки_вторичка": "wiki-deals",
+  "wikidom_сделки_количество_сделок_новостройки": "wiki-deals-new",
+  "wikidom_сделки_количество_сделок_вторичка": "wiki-deals-sec",
+  "строительство_год_тыс": "build-k",
+  "строительство_год": "build",
+  "idx_med_avg_minsk": "idx-med-avg-minsk",
+  "idx_med_avg_by": "idx-med-avg-by",
+  "idx_med_minsk_by": "idx-med-minsk-by",
+  "idx_med_m2": "idx-med-m2",
+  "idx_avg_m2": "idx-avg-m2",
+  "idx_rent_med": "idx-rent-med",
+};
+
+
+/* Ключ ряда -> ID для ссылки. Новый ряд без записи: ключ с "-" вместо "_". */
+function seriesId(key) {
+  return SERIES_IDS[key] || String(key).replace(/_/g, "-");
+}
+
+
+/* ID (или старый полный ключ) -> ключ ряда в data.json, иначе null. */
+function keyFromSeriesToken(token) {
+  const value = String(token == null ? "" : token).trim();
+
+  if (!value) return null;
+
+  const metas = getSeriesMeta();
+
+  if (metas.some((meta) => meta.key === value)) return value;
+
+  const found = metas.find((meta) => seriesId(meta.key) === value);
+
+  return found ? found.key : null;
+}
+
+
+/* Список рядов из ссылки: "a-b_c-d" (новый) или "ключ1,ключ2" (старый). */
+function parseSeriesList(value) {
+  if (!value) return [];
+
+  /* Один ряд: ID или старый ключ (в нём могут быть "_"). */
+  const single = keyFromSeriesToken(value);
+
+  if (single) return [single];
+
+  const tokens = value.includes(",") ? value.split(",") : value.split("_");
+  const out = [];
+
+  tokens.forEach((token) => {
+    const key = keyFromSeriesToken(token);
+
+    if (key && !out.includes(key)) out.push(key);
+  });
+
+  return out;
+}
+
+
+/* [2019,2020,2021,2023] -> "2019-2021_2023". */
+function formatYearRanges(years) {
+  const list = Array.from(
+    new Set(years.map(Number).filter((year) => Number.isInteger(year)))
+  ).sort((a, b) => a - b);
+
+  const parts = [];
+  let i = 0;
+
+  while (i < list.length) {
+    let j = i;
+
+    while (j + 1 < list.length && list[j + 1] === list[j] + 1) j++;
+
+    parts.push(j > i ? `${list[i]}-${list[j]}` : String(list[i]));
+    i = j + 1;
+  }
+
+  return parts.join("_");
+}
+
+
+/* "2019-2021_2023" (или старое "2019,2020") -> [2019,2020,2021,2023]. */
+function parseYearRanges(value) {
+  const out = [];
+
+  String(value || "").split(/[_,]/).forEach((part) => {
+    const match = /^(\d{4})(?:-(\d{4}))?$/.exec(part.trim());
+
+    if (!match) return;
+
+    let from = Number(match[1]);
+    let to = match[2] ? Number(match[2]) : from;
+
+    if (from > to) [from, to] = [to, from];
+    if (to - from > 300) return;
+
+    for (let year = from; year <= to; year++) out.push(year);
+  });
+
+  return out;
+}
+
+
+/* "3-8" (месяцы с 1) или старое "2,7" (с 0) -> [2, 7] (индексы с 0) или null. */
+function parseMonthRange(value) {
+  if (!value) return null;
+
+  let parts;
+  let shift = 0;
+
+  if (value.includes(",")) {
+    parts = value.split(",");
+  } else {
+    parts = value.split("-");
+    shift = 1;
+  }
+
+  if (parts.length !== 2 || parts.some((part) => part.trim() === "")) {
+    return null;
+  }
+
+  const from = Number(parts[0]) - shift;
+  const to = Number(parts[1]) - shift;
+
+  return Number.isInteger(from) && Number.isInteger(to) ? [from, to] : null;
+}
+
+
+/*
+ * Адрес страницы с новыми параметрами, без хвоста #... .
+ * Строка запроса собирается вручную: "_" и "-" остаются как есть.
+ */
+function makeShareUrl(pairs) {
+  const url = new URL(window.location.href);
+
+  url.hash = "";
+  url.search = pairs
+    .map(([key, value]) =>
+      `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`
+    )
+    .join("&");
+
+  return url.toString();
+}

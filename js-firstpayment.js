@@ -245,29 +245,40 @@
 
   /* Ссылка со всеми введёнными настройками (g=fp). */
   function shareUrl() {
-    var u = new URL(window.location.href), q = new URLSearchParams();
-    q.set("g", "fp"); q.set("h", st.hold); q.set("s", st.spread);
-    q.set("r", st.rent ? 1 : 0); q.set("d", st.cheap ? 1 : 0); q.set("w", st.family ? 1 : 0);
-    q.set("k", st.rooms); q.set("a", st.area); q.set("i", st.income); q.set("b", st.bpm);
-    q.set("l", st.loan); q.set("p", st.rate); q.set("y", st.years);
-    u.search = q.toString(); u.hash = "";
-    return u.toString();
+    return makeShareUrl([
+      ["g", "fp"], ["hold", st.hold], ["spread", st.spread],
+      ["rent", st.rent ? 1 : 0], ["cheap", st.cheap ? 1 : 0], ["family", st.family ? 1 : 0],
+      ["rooms", st.rooms], ["area", st.area], ["income", st.income], ["bpm", st.bpm],
+      ["loan", st.loan], ["rate", st.rate], ["term", st.years]
+    ]);
+  }
+
+  /* Новое имя параметра; если его нет — старое короткое (старые ссылки). */
+  function pick(q, name, old) {
+    var v = q.get(name);
+    return v != null ? v : q.get(old);
   }
 
   function restoreFromUrl() {
     var q = new URLSearchParams(window.location.search);
     if (q.get("g") !== "fp") return false;
-    if (["pillow", "dep", "usd"].indexOf(q.get("h")) >= 0) st.hold = q.get("h");
-    var sp = Number(q.get("s")); if (sp >= 0 && sp <= 4) st.spread = Math.round(sp);
-    st.rent = q.get("r") === "1"; st.cheap = q.get("d") === "1"; st.family = q.get("w") === "1";
-    if (["annuity", "diff"].indexOf(q.get("l")) >= 0) st.loan = q.get("l");
-    var rm = Math.round(Number(q.get("k"))), ar = parseFloat(q.get("a"));
+    var hold = pick(q, "hold", "h");
+    if (["pillow", "dep", "usd"].indexOf(hold) >= 0) st.hold = hold;
+    var spv = pick(q, "spread", "s"), sp = Number(spv);
+    if (spv != null && sp >= 0 && sp <= 4) st.spread = Math.round(sp);
+    st.rent = pick(q, "rent", "r") === "1";
+    st.cheap = pick(q, "cheap", "d") === "1";
+    st.family = pick(q, "family", "w") === "1";
+    var loan = pick(q, "loan", "l");
+    if (["annuity", "diff"].indexOf(loan) >= 0) st.loan = loan;
+    var rm = Math.round(Number(pick(q, "rooms", "k"))), ar = parseFloat(pick(q, "area", "a"));
     if (rm >= 1 && rm <= 3) { st.rooms = rm; st.area = CFG.AREA[rm]; }
     if (isFinite(ar) && ar >= 10 && ar <= 300) st.area = ar;
-    if (["med", "avg"].indexOf(q.get("i")) >= 0) st.income = q.get("i");
-    if ([1.5, 2, 2.5, 3].indexOf(Number(q.get("b"))) >= 0) st.bpm = Number(q.get("b"));
+    var inc = pick(q, "income", "i");
+    if (["med", "avg"].indexOf(inc) >= 0) st.income = inc;
+    if ([1.5, 2, 2.5, 3].indexOf(Number(pick(q, "bpm", "b"))) >= 0) st.bpm = Number(pick(q, "bpm", "b"));
     /* Те же правила, что у живых полей: ставка — любое число ≥ 0, срок — любое число ≥ 1. */
-    var rt = parseFloat(q.get("p")), yr = parseFloat(q.get("y"));
+    var rt = parseFloat(pick(q, "rate", "p")), yr = parseFloat(pick(q, "term", "y"));
     if (isFinite(rt) && rt >= 0) st.rate = rt;
     if (isFinite(yr) && yr >= 1) st.years = yr;
     return true;
