@@ -135,7 +135,7 @@ function initializeVisibility() {
    *   - средняя ЗП Минск
    *   - медианная ЗП Минск
    *   - стоимость аренды t-s.by
-   *   - стоимость м2 однушек Realt
+   *   - стоимость м² однушек Realt
    */
   const defaultKeys = new Set([
     "средняя_средняя_минск",
@@ -1693,10 +1693,10 @@ function updateZoomPresetButtons() {
   }
 
   container.querySelectorAll(".zoom-preset-btn").forEach((button) => {
-    button.classList.toggle(
-      "is-active",
-      button.dataset.value === state.zoomPreset
-    );
+    const active = button.dataset.value === state.zoomPreset;
+
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   });
 }
 

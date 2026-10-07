@@ -625,6 +625,7 @@ input[type="checkbox"]:focus-visible {
 
 .stat-main {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: 8px;
 }
@@ -757,16 +758,14 @@ input[type="checkbox"]:focus-visible {
   text-decoration: line-through;
 }
 
-@media (max-width: 900px) {
-  .top-blocks { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
-  .stat-card { padding: 16px; }
-  .stat-value { font-size: 28px; }
-}
-
 /* ============================================================
    Tablet / mobile
    ============================================================ */
 @media (max-width: 900px) {
+  .top-blocks { grid-template-columns: 1fr; gap: 12px; margin-bottom: 12px; }
+  .stat-card { padding: 16px; }
+  .stat-value { font-size: 28px; }
+
   .page { padding: 12px 8px 24px; }
 
   .site-header { margin-bottom: 12px; padding-bottom: 12px; }
@@ -963,15 +962,6 @@ input[type="checkbox"]:focus-visible {
   min-width: 0;
 }
 
-.stat-main { flex-wrap: wrap; }
-
-.salary-row { margin-top: 14px; }
-.salary-row + .salary-row {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
-}
-
 .salary-label {
   margin-bottom: 2px;
   font-size: 12px;
@@ -1068,7 +1058,11 @@ input[type="checkbox"]:focus-visible {
   margin-top: 10px;
 }
 
-.salary-row + .salary-row { margin-top: 10px; padding-top: 10px; }
+.salary-row + .salary-row {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+}
 
 .salary-side { min-width: 0; }
 .salary-side .salary-label { margin-bottom: 0; }

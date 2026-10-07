@@ -362,7 +362,9 @@
 
   function mark(id, val) {
     root.querySelectorAll("#" + id + " .segmented-btn").forEach(function (b) {
-      b.classList.toggle("is-active", String(b.dataset.v) === String(val));
+      var on = String(b.dataset.v) === String(val);
+      b.classList.toggle("is-active", on);
+      b.setAttribute("aria-pressed", on ? "true" : "false");
     });
   }
 

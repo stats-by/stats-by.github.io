@@ -35,13 +35,23 @@ function wireSegmented(id, onChange) {
   const buttons =
     element.querySelectorAll(".segmented-btn");
 
+  /* Начальное состояние для скринридеров берём из класса is-active. */
+  buttons.forEach((item) => {
+    item.setAttribute(
+      "aria-pressed",
+      item.classList.contains("is-active") ? "true" : "false"
+    );
+  });
+
   buttons.forEach((button) => {
     button.addEventListener("click", () => {
       buttons.forEach((item) => {
         item.classList.remove("is-active");
+        item.setAttribute("aria-pressed", "false");
       });
 
       button.classList.add("is-active");
+      button.setAttribute("aria-pressed", "true");
 
       onChange(button.dataset.value);
     });
@@ -53,7 +63,10 @@ function syncSegmented(id, value) {
   const element = document.getElementById(id);
   if (!element) return;
   element.querySelectorAll(".segmented-btn").forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.value === value);
+    const active = button.dataset.value === value;
+
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", active ? "true" : "false");
   });
 }
 
@@ -1039,34 +1052,32 @@ async function init() {
       document.getElementById("chart");
 
     if (chartElement) {
-      chartElement.innerHTML = `
-        <div style="
-          padding:24px;
-          color:#E8ECF1;
-          font-family:var(--font-ui);
-        ">
-          <strong>
-            Не удалось загрузить данные.
-          </strong>
+      /* Текст ошибки вставляем через textContent, а не innerHTML. */
+      const box = document.createElement("div");
+      box.style.cssText =
+        "padding:24px;color:#E8ECF1;font-family:var(--font-ui);";
 
-          <div style="
-            margin-top:8px;
-            color:#878787;
-            font-size:14px;
-          ">
-            ${String(error.message || error)}
-          </div>
+      const title = document.createElement("strong");
+      title.textContent = "Не удалось загрузить данные.";
 
-          <div style="
-            margin-top:12px;
-            color:#878787;
-            font-size:12px;
-          ">
-            Открой консоль браузера (F12 → Console),
-            если нужна дополнительная диагностика.
-          </div>
-        </div>
-      `;
+      const message = document.createElement("div");
+      message.style.cssText =
+        "margin-top:8px;color:#878787;font-size:14px;";
+      message.textContent = String(error.message || error);
+
+      const hint = document.createElement("div");
+      hint.style.cssText =
+        "margin-top:12px;color:#878787;font-size:12px;";
+      hint.textContent =
+        "Открой консоль браузера (F12 → Console), " +
+        "если нужна дополнительная диагностика.";
+
+      box.appendChild(title);
+      box.appendChild(message);
+      box.appendChild(hint);
+
+      chartElement.innerHTML = "";
+      chartElement.appendChild(box);
     }
   }
 }
@@ -1327,8 +1338,10 @@ document.addEventListener("taxmodechange", (event) => {
     button.addEventListener("click", function () {
       toggle.querySelectorAll(".segmented-btn").forEach(function (item) {
         item.classList.remove("is-active");
+        item.setAttribute("aria-pressed", "false");
       });
       button.classList.add("is-active");
+      button.setAttribute("aria-pressed", "true");
       region = button.dataset.value;
       render();
     });

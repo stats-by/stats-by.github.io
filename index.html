@@ -6,6 +6,7 @@
 <title>Минск в цифрах — дашборд</title>
 <meta name="description" content="Статистика экономических показателей Беларуси и Минска">
 <meta name="theme-color" content="#090b0c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 100 100%27%3E%3Ctext y=%27.9em%27 font-size=%2790%27%3E%F0%9F%93%8A%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 <link rel="stylesheet" href="firstpayment.css">
 </head>
@@ -20,8 +21,8 @@
     <div class="tax-switch">
       <span class="tax-switch-label">Зарплаты и доходы:</span>
       <div class="segmented" id="taxToggle" role="group" aria-label="Налоги">
-        <button type="button" class="segmented-btn" data-value="gross">До вычета налогов</button>
-        <button type="button" class="segmented-btn is-active" data-value="net">После вычета налогов</button>
+        <button type="button" class="segmented-btn" aria-pressed="false" data-value="gross">До вычета налогов</button>
+        <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="net">После вычета налогов</button>
       </div>
     </div>
   </header>
@@ -57,8 +58,8 @@
       <div class="stat-head">
         <h2 class="stat-title">Зарплата</h2>
         <div class="segmented segmented-sm" id="salaryRegionToggle" role="group" aria-label="Регион">
-          <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
-          <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="minsk">Минск</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="belarus">Беларусь</button>
         </div>
       </div>
 
@@ -104,8 +105,8 @@
           </span>
         </div>
         <div class="segmented segmented-sm" id="incomeRegionToggle" role="group" aria-label="Регион">
-          <button type="button" class="segmented-btn is-active" data-value="minsk">Минск</button>
-          <button type="button" class="segmented-btn" data-value="belarus">Беларусь</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="minsk">Минск</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="belarus">Беларусь</button>
         </div>
       </div>
       <div class="income-period" id="incomePeriod"></div>
@@ -138,13 +139,13 @@
 
       <div class="toolbar">
         <div class="segmented" id="modeToggle" role="group" aria-label="Вид значений">
-          <button type="button" class="segmented-btn is-active" data-value="absolute">Абсолютные</button>
-          <button type="button" class="segmented-btn" data-value="percent">В процентах</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="percent">В процентах</button>
         </div>
 
         <div class="segmented" id="currencyToggle" role="group" aria-label="Валюта">
-          <button type="button" class="segmented-btn is-active" data-value="BYN">BYN</button>
-          <button type="button" class="segmented-btn" data-value="USD">USD</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="USD">USD</button>
         </div>
       </div>
 
@@ -180,13 +181,13 @@
 
       <div class="toolbar">
         <div class="segmented" id="seasonalityModeToggle" role="group" aria-label="Вид значений сезонности">
-          <button type="button" class="segmented-btn" data-value="absolute">Абсолютные</button>
-          <button type="button" class="segmented-btn is-active" data-value="percent">В процентах</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="absolute">Абсолютные</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="percent">В процентах</button>
         </div>
 
         <div class="segmented" id="seasonalityCurrencyToggle" role="group" aria-label="Валюта сезонности">
-          <button type="button" class="segmented-btn" data-value="BYN">BYN</button>
-          <button type="button" class="segmented-btn is-active" data-value="USD">USD</button>
+          <button type="button" class="segmented-btn" aria-pressed="false" data-value="BYN">BYN</button>
+          <button type="button" class="segmented-btn is-active" aria-pressed="true" data-value="USD">USD</button>
         </div>
       </div>
 
