@@ -87,7 +87,7 @@ const MONTH_GEN_RU = [
  */
 const X_EDGE_LABEL_PX = 46;   /* «сен 2026» */
 const X_YEAR_LABEL_PX = 28;   /* «2021» */
-const X_LABEL_GAP_PX = 10;    /* минимальный зазор между подписями */
+const X_LABEL_GAP_PX = 5;     /* минимальный зазор между подписями (и до крайних подписей) */
 
 /* Размеры шрифтов подписей осей. */
 const X_LABEL_FONT_PX = 10;   /* годы / месяцы под графиком */
@@ -1577,7 +1577,18 @@ function formatValue(value, meta, percentMode = false) {
   const unit = getDisplayUnit(meta);
 
   /*
-   * Денежные показатели.
+   * Доходы (зарплатные ряды): от 0 до 10 — 0,00; от 10 до 100 — 0,0;
+   * больше 100 — целые. Нужно для ранних лет, когда в USD суммы малы.
+   */
+  if (getInternalGroup(meta) === "salary") {
+    const abs = Math.abs(number);
+    const digits = abs > 100 ? 0 : abs >= 10 ? 1 : 2;
+
+    return `${formatNumber(number, digits)} ${unit}`;
+  }
+
+  /*
+   * Прочие денежные показатели.
    */
   if (isMoneySeries(meta)) {
     return `${formatNumber(number, 0)} ${unit}`;
