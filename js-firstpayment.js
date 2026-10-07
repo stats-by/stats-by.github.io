@@ -40,8 +40,27 @@
       { minimumFractionDigits: d || 0, maximumFractionDigits: d || 0 });
   }
 
+  var MONTH_NOM = ["январь", "февраль", "март", "апрель", "май", "июнь",
+                   "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+  var MONTH_GEN = ["января", "февраля", "марта", "апреля", "мая", "июня",
+                   "июля", "августа", "сентября", "октября", "ноября", "декабря"];
+
+  /* «2013-11» -> «ноябрь 2013»; gen = true -> «ноября 2013» (для «с …», «до …»). */
+  function fm(ym, gen) {
+    var m = /^(\d{4})-(\d{2})$/.exec(String(ym));
+    if (!m) return String(ym);
+    var i = Number(m[2]) - 1;
+    if (i < 0 || i > 11) return String(ym);
+    return (gen ? MONTH_GEN : MONTH_NOM)[i] + " " + m[1];
+  }
+
   function lastIdx(arr, upTo) {
     for (var i = Math.min(upTo, arr.length - 1); i >= 0; i--) if (num(arr[i]) != null) return i;
+    return -1;
+  }
+
+  function firstIdx(arr) {
+    for (var i = 0; i < arr.length; i++) if (num(arr[i]) != null) return i;
     return -1;
   }
 
@@ -66,13 +85,11 @@
     /* Конец периода накоплений — последний месяц с данными БПМ.
        По остальным показателям берём последнее известное значение (fill тянет его вперёд). */
     var end = lastIdx(S[K.bpm], M.length - 1);
-    var start = 0;                                     /* первая публикация медианной ЗП по Минску */
-    while (start < M.length && num(S[K.median][start]) == null) start++;
     var rate = fill(S[K.rate], end);
     var refi = fill(S[K.refi], end);
     var bpm = fill(S[K.bpm], end);
     /* Аренда однушки: t-s.by; до его первой точки — Realt, уменьшенный на средний разрыв 2017–2025. */
-    var ts = S[K.rentTs], rl = S[K.rentRealt], ratios2 = [], firstTs = 0, i2;
+    var ts = S[K.rentTs], rl = S[K.rentRealt], ratios2 = [], firstTs = 0;
     M.forEach(function (mm, j) {
       var y = Number(mm.slice(0, 4));
       if (y >= CFG.RENT_FROM && y <= CFG.RENT_TO && num(ts[j]) != null && num(rl[j]) != null) ratios2.push(rl[j] / ts[j]);
@@ -104,9 +121,17 @@
       rent: M[lastIdx(ts, end)],
       avg: M[lastIdx(S[K.avg], end)]
     };
+
+    /* Первый месяц с данными по каждому ряду: от них зависит, с какого месяца можно считать историю. */
+    function first(arr) { var i = firstIdx(arr); return i < 0 ? end : i; }
+    var firstOf = {
+      med: first(med), avg: first(avg), bpm: first(bpm),
+      rate: first(rate), refi: first(refi), rent: first(rentUsd)
+    };
+
     return {
       last: last,
-      months: M, start: start, end: end, rate: rate, refi: refi, med: med, bpm: bpm,
+      months: M, first: firstOf, end: end, rate: rate, refi: refi, med: med, bpm: bpm,
       rentByn: rentUsd.map(function (v, i) { return v == null || !rate[i] ? 0 : v * rate[i]; }),
       avg: avg, rentK: rentK, rentN: ratios2.length, firstTs: M[firstTs],
       k: k, kN: ratios.length, lastMedian: M[L],
@@ -114,9 +139,24 @@
     };
   }
 
+  /* Начало истории: самый поздний «первый месяц» среди рядов, которые нужны при текущих настройках.
+     Без аренды и при средней ЗП — начало данных средней ЗП / БПМ; с медианой — первая публикация
+     медианы; с арендой — ещё и начало данных по аренде. */
+  function startFor(P, s) {
+    var c = [[s.income === "avg" ? P.first.avg : P.first.med, s.income === "avg" ? "avg" : "med"],
+             [P.first.bpm, "bpm"]];
+    if (s.hold === "usd" || s.rent) c.push([P.first.rate, "rate"]);
+    if (s.hold === "dep") c.push([P.first.refi, "refi"]);
+    if (s.rent) c.push([P.first.rent, "rent"]);
+    var best = c[0];
+    c.forEach(function (x) { if (x[0] > best[0]) best = x; });
+    return { idx: Math.min(best[0], P.end), why: best[1] };
+  }
+
   /* ----- Расчёт --------------------------------------------- */
   function calc(P, s) {
     var people = s.family ? 2 : 1, t, sav = [];
+    var from = startFor(P, s), start = from.idx;
     function room(i) {    /* доход минус расходы, без аренды */
       var min = minAt(i);
       return inc(i) - s.bpm * people * min;
@@ -124,7 +164,7 @@
     function inc(i) { return (s.income === "avg" ? P.avg[i] : P.med[i]) * CFG.TAX * people; }
     function minAt(i) { return P.bpm[i]; }
     function rentAt(i) { return s.rent ? P.rentByn[i] * (s.cheap ? 1 - CFG.RENT_DISCOUNT : 1) : 0; }
-    for (t = P.start; t <= P.end; t++)
+    for (t = start; t <= P.end; t++)
       sav[t] = Math.max(0, room(t) - rentAt(t));
 
     /* Платёж по кредиту = всё, что остаётся в последнем месяце + освободившаяся аренда. */
@@ -147,11 +187,11 @@
 
     var m = P.end, p = null, found = down <= 0;
     if (!found) {
-      for (m = P.end; m >= P.start; m--) {
+      for (m = P.end; m >= start; m--) {
         p = path(m);
         if (p[p.length - 1] >= down) { found = true; break; }
       }
-      if (!found) { m = P.start; p = path(m); }
+      if (!found) { m = start; p = path(m); }
     } else p = path(P.end);
 
     var months = P.end - m + 1;
@@ -161,6 +201,7 @@
     var pay0 = loan * f;
     var paid = s.loan === "annuity" ? pay0 * N : loan + loan * rm * (N + 1) / 2;
     return { f: f, payNow: Math.max(0, priceByn - total) * f, inc: inc(P.end), exp: s.bpm * people * minAt(P.end), rentEnd: rentAt(P.end), priceUsd: priceUsd, priceByn: priceByn, fx: fx, atMin: down <= CFG.MIN_DOWN * priceByn + 0.5, sav: sav[P.end], cap: cap, loan: loan, down: down, path: p, startMonth: P.months[m],
+             histIdx: start, histWhy: from.why,
              months: months, found: found, total: total, extra: total - deposited,
              pay: pay0, interest: paid - loan, paid: paid };
   }
@@ -170,6 +211,15 @@
 
   var root = document.getElementById("fpRoot");
   if (!root) return;
+
+  var WHY = {
+    med: "первая публикация медианной ЗП по Минску",
+    avg: "начало данных по средней ЗП по Минску",
+    bpm: "начало данных БПМ",
+    rate: "начало данных по курсу USD",
+    refi: "начало данных по ставке рефинансирования",
+    rent: "начало данных по аренде"
+  };
 
   function plural(n, a, b, c) {
     var x = n % 100, y = n % 10;
@@ -216,9 +266,10 @@
     if (isFinite(ar) && ar >= 10 && ar <= 300) st.area = ar;
     if (["med", "avg"].indexOf(q.get("i")) >= 0) st.income = q.get("i");
     if ([1.5, 2, 2.5, 3].indexOf(Number(q.get("b"))) >= 0) st.bpm = Number(q.get("b"));
+    /* Те же правила, что у живых полей: ставка — любое число ≥ 0, срок — любое число ≥ 1. */
     var rt = parseFloat(q.get("p")), yr = parseFloat(q.get("y"));
-    if (isFinite(rt) && rt >= 0 && rt <= 100) st.rate = rt;
-    if (isFinite(yr) && yr >= 1 && yr <= 40) st.years = yr;
+    if (isFinite(rt) && rt >= 0) st.rate = rt;
+    if (isFinite(yr) && yr >= 1) st.years = yr;
     return true;
   }
 
@@ -256,8 +307,8 @@
           seg("fpCheap", [["0", "Рыночная", ""], ["1", "Ниже рынка −20%", ""]]) + "</div>" +
         '<div class="fp-row"><span>Кредит</span>' + seg("fpLoan", [["annuity", "Аннуитет", "равные платежи"], ["diff", "Диф.", "с уменьшением"]]) +
           '<div class="fp-ins">' +
-          '<label class="fp-in">ставка <input type="number" id="fpRate" min="0" max="100" step="0.1" value="14.3">%</label>' +
-          '<label class="fp-in">срок <input type="number" id="fpYears" min="1" max="40" step="1" value="25">лет</label></div></div>' +
+          '<label class="fp-in">ставка <input type="number" id="fpRate" min="0" step="0.1" value="14.3">%</label>' +
+          '<label class="fp-in">срок <input type="number" id="fpYears" min="1" step="1" value="25">лет</label></div></div>' +
       "</div>" +
       '<div class="fp-out" id="fpOut"></div>' +
       '<p class="hint" id="fpNote"></p>';
@@ -340,7 +391,7 @@
     root.querySelector("#fpTitle").textContent = "Первый взнос: " + st.rooms + "-комнатный бабушатник, " + fmt(st.area, st.area % 1 ? 1 : 0) + " м²";
 
     var big, sub, pct = r.total / r.priceByn * 100, minPct = CFG.MIN_DOWN * 100;
-    var period = "За последние " + span(r.months) + " (с " + r.startMonth + ") человек ";
+    var period = "За последние " + span(r.months) + " (с " + fm(r.startMonth, true) + ") человек ";
     if (!r.found && pct < minPct) {
       big = "Не хватило на взнос";
       sub = period + "накопил меньше минимального первоначального взноса в " + minPct + "% — всего " + fmt(pct, 1) + "% от стоимости квартиры";
@@ -348,7 +399,7 @@
       big = "Копить дальше";
       sub = period + "накопил " + fmt(pct, 1) + "% от стоимости квартиры (" + m(r.total) + " " + u + ") — минимальный взнос есть, " +
         "но кредит на остальное он не потянул бы: нужен взнос " + fmt(r.down / r.priceByn * 100, 1) + "% (" + m(r.down) + " " + u + ")";
-    } else { big = span(r.months); sub = r.months + " мес., копить нужно было начать с " + r.startMonth; }
+    } else { big = span(r.months); sub = r.months + " мес., копить нужно было начать с " + fm(r.startMonth, true); }
 
     var bars = r.path.map(function (v, i) {
       var h = Math.min(100, v / (r.down || 1) * 100);
@@ -377,7 +428,7 @@
             fmt(r.payNow) + " <small>BYN/мес</small></div></div></div>" +
       "</div>" +
       (r.path.length ? '<div class="fp-chart"><div class="fp-bars">' + bars + '</div><div class="fp-axis"><span>' +
-        r.startMonth + "</span><span>накоплено " + m(r.total) + " из " + m(r.down) + " " + u + "</span></div></div>" : "") +
+        fm(r.startMonth) + "</span><span>накоплено " + m(r.total) + " из " + m(r.down) + " " + u + "</span></div></div>" : "") +
       '<div class="fp-cards fp-cards-3">' +
         card("Тело кредита", fmt(r.loan), "цена минус взнос") +
         card("Проценты банку", fmt(r.interest), "ставка " + fmt(st.rate, 1) + "% на " + st.years + " лет", "is-red") +
@@ -387,17 +438,17 @@
     var roomWord = ["однокомнатных", "двухкомнатных", "трёхкомнатных"][st.rooms - 1];
     var incomeText = st.income === "avg"
       ? "средняя ЗП по Минску после вычета налогов"
-      : "медианная ЗП по Минску после вычета налогов (между майскими и ноябрьскими публикациями линейно, после последней, " + P.lastMedian +
+      : "медианная ЗП по Минску после вычета налогов (между майскими и ноябрьскими публикациями линейно, после последней, " + fm(P.lastMedian) +
         ", — средняя ЗП × " + fmt(P.k, 3) + ": средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек)";
     root.querySelector("#fpNote").textContent =
-      "Расчёт на " + P.months[P.end] + " (последний месяц с данными БПМ). Остальные данные — за последний доступный месяц: курс USD — " + P.last.rate +
-      ", цены м² — " + P.last.price + ", аренда — " + P.last.rent + ", средняя ЗП — " + P.last.avg + "; если за расчётный месяц данных нет, считаем, что они не изменились. Доход — " + incomeText + ". Расходы — " +
+      "Расчёт на " + fm(P.months[P.end]) + " (последний месяц с данными БПМ). Остальные данные — за последний доступный месяц: курс USD — " + fm(P.last.rate) +
+      ", цены м² — " + fm(P.last.price) + ", аренда — " + fm(P.last.rent) + ", средняя ЗП — " + fm(P.last.avg) + "; если за расчётный месяц данных нет, считаем, что они не изменились. Доход — " + incomeText + ". Расходы — " +
       fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (бюджет прожиточного минимума на каждый месяц из данных сайта). Цена — средняя цена м² " + roomWord + " квартир Wikidom × площадь. " +
-      "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + P.firstTs +
+      "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + fm(P.firstTs, true) +
       ", где их нет, — данные Realt, уменьшенные в " + fmt(P.rentK, 2) + " раза (средний разрыв Realt и t-s.by в " + CFG.RENT_FROM + "–" + CFG.RENT_TO + ", " +
       P.rentN + " месяцев). Взнос подобран так, чтобы платёж по кредиту " +
       "не превышал того, что человек откладывал в последнем месяце (плюс освободившаяся аренда), но не меньше " + minPct + "% цены. " +
-      "История — с первой публикации медианной ЗП по Минску (" + P.months[P.start] + "). Вклад без налога, ставка = ставка " +
+      "История — с " + fm(P.months[r.histIdx], true) + " (" + WHY[r.histWhy] + "); при других настройках начало может сдвигаться. Вклад без налога, ставка = ставка " +
       "рефинансирования месяца (СР) + надбавка, ежемесячная капитализация. Без учёта инфляции и роста цен на жильё.";
   }
 
