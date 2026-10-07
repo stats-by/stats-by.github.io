@@ -52,7 +52,7 @@ function buildSeasonalityAverageHtml(monthName, validParams, meta) {
     if (rounded > 0) valueColor = "var(--up)";
     if (rounded < 0) valueColor = "var(--down)";
   } else if (average != null) {
-    valueText = formatValue(average, meta, false);
+    valueText = formatValue(average, meta, false, state.seasonalityCurrency);
   }
 
   return `
@@ -98,7 +98,7 @@ function getSeasonalityYears(meta) {
     return [];
   }
 
-  const values = convertMonthlyValues(meta, state.currency);
+  const values = convertMonthlyValues(meta, state.seasonalityCurrency);
   const years = new Set();
 
   DATA.months.forEach((key, index) => {
@@ -140,6 +140,23 @@ function syncSeasonalityMonthState() {
 }
 
 
+/*
+ * Стиль линии года: сначала все цвета палитры сплошными, затем те же
+ * цвета пунктиром, затем точками (как в показателях первого графика).
+ */
+const SEASONALITY_DASHES = ["solid", "dashed", "dotted"];
+
+function getSeasonalityYearStyle(index) {
+  const i = Math.max(0, index);
+  const n = SERIES_PALETTE.length;
+
+  return {
+    color: SERIES_PALETTE[i % n],
+    dash: SEASONALITY_DASHES[Math.floor(i / n) % SEASONALITY_DASHES.length],
+  };
+}
+
+
 function buildSeasonalityYearsPanel() {
   const container = document.getElementById("seasonalityYearsList");
   const meta = metaByKey(state.seasonalityKey);
@@ -170,7 +187,8 @@ function buildSeasonalityYearsPanel() {
 
     const swatch = document.createElement("span");
     swatch.className = "check-swatch";
-    swatch.style.background = SERIES_PALETTE[index % SERIES_PALETTE.length];
+    const yearStyle = getSeasonalityYearStyle(index);
+    applySwatchDash(swatch, yearStyle.dash, yearStyle.color);
 
     const text = document.createElement("span");
     text.className = "check-label";
@@ -388,9 +406,8 @@ function getSeasonalitySeries(meta) {
         }
       }
 
-      const color = SERIES_PALETTE[
-        years.indexOf(year) % SERIES_PALETTE.length
-      ];
+      const yearStyle = getSeasonalityYearStyle(years.indexOf(year));
+      const color = yearStyle.color;
 
       return {
         id: `seasonality-${meta.key}-${year}`,
@@ -416,7 +433,7 @@ function getSeasonalitySeries(meta) {
           : 0,
         triggerLineEvent: true,
         cursor: "pointer",
-        lineStyle: { width: 1.5, opacity: 0.8, color },
+        lineStyle: { width: 1.5, opacity: 0.8, color, type: yearStyle.dash },
         emphasis: { focus: "series", lineStyle: { width: 2.5 } },
         itemStyle: { color },
       };
@@ -437,6 +454,7 @@ function buildSeasonalityYAxis(meta) {
   return {
     type: "value",
     position: "left",
+    scale: true,
     axisLabel: {
       color: "#878787",
       fontSize: AXIS_FONT_PX,
@@ -455,6 +473,7 @@ function buildSeasonalityTooltipFormatter(params) {
 
   const meta = metaByKey(state.seasonalityKey);
   const activeId = state.hoveredSeasonalitySeriesId;
+  const allYears = getSeasonalityYears(meta);
 
   const validParams = params.filter((param) => {
     const value = param.value && typeof param.value === "object"
@@ -496,16 +515,19 @@ function buildSeasonalityTooltipFormatter(params) {
     );
 
     const color = param.color || "#3DDC84";
+    const dash = getSeasonalityYearStyle(
+      allYears.indexOf(Number(param.seriesName))
+    ).dash;
     const valueText = state.seasonalityMode === "percent"
       ? formatChartPercent(value)
-      : formatValue(value, meta, false);
+      : formatValue(value, meta, false, state.seasonalityCurrency);
 
     html += `
       <div class="tt-row ${isActive ? "is-active" : ""} ${isSeasonalityExcluded(param) ? "is-excluded" : ""}"
            data-series-id="${param.seriesId}"
            data-series-name="${param.seriesName || ""}"
            style="--row-color:${color};">
-        <span class="tt-dot" style="background:${color};"></span>
+        <span class="tt-dot${dash === "solid" ? "" : " is-dashed"}"${dash === "solid" ? ` style="background:${color};"` : ""}></span>
         <span class="tt-name">${param.seriesName}</span>
         <span class="tt-val">${valueText}${isApproximation ? " (аппр.)" : ""}</span>
       </div>

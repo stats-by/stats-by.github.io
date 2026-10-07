@@ -429,7 +429,11 @@ function getSeriesWidth(meta, fallback) {
  * со штриховкой (is-dashed) / точками (is-dotted) — у остальных.
  */
 function applySwatchStyle(element, meta, color) {
-  const dash = getSeriesDash(meta);
+  applySwatchDash(element, getSeriesDash(meta), color);
+}
+
+
+function applySwatchDash(element, dash, color) {
 
   element.style.setProperty("--sw", color);
   element.classList.toggle("is-dashed", dash === "dashed");
@@ -709,7 +713,7 @@ function getMetaUnit(meta) {
 }
 
 
-function getDisplayUnit(meta) {
+function getDisplayUnit(meta, currency = state.currency) {
   if (!meta) {
     return "";
   }
@@ -721,7 +725,7 @@ function getDisplayUnit(meta) {
    * исходные данные в BYN.
    */
   if (group === "salary") {
-    return state.currency;
+    return currency;
   }
 
   /*
@@ -729,7 +733,7 @@ function getDisplayUnit(meta) {
    * исходные данные в USD.
    */
   if (group === "housing") {
-    return state.currency;
+    return currency;
   }
 
   /*
@@ -921,7 +925,7 @@ const DERIVED_KEYS = {
 const DERIVED_INDEX_DEFS = [
   {
     key: "idx_med_avg_minsk",
-    label: "Медианная ЗП в % от средней, Минск",
+    label: "медианная ЗП в % от средней, Минск",
     unit: "%",
     decimals: 1,
     inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.avgMinsk],
@@ -929,7 +933,7 @@ const DERIVED_INDEX_DEFS = [
   },
   {
     key: "idx_med_avg_by",
-    label: "Медианная ЗП в % от средней, страна",
+    label: "медианная ЗП в % от средней, страна",
     unit: "%",
     decimals: 1,
     inputs: [DERIVED_KEYS.medBy, DERIVED_KEYS.avgBy],
@@ -937,7 +941,7 @@ const DERIVED_INDEX_DEFS = [
   },
   {
     key: "idx_med_minsk_by",
-    label: "Медианная ЗП: Минск в % от страны",
+    label: "медианная ЗП: Минск в % от страны",
     unit: "%",
     decimals: 1,
     inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.medBy],
@@ -945,7 +949,7 @@ const DERIVED_INDEX_DEFS = [
   },
   {
     key: "idx_med_m2",
-    label: "Медианная ЗП Минск, м\u00B2",
+    label: "медианная ЗП Минск, м\u00B2",
     unit: "м\u00B2",
     decimals: 2,
     inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
@@ -953,7 +957,7 @@ const DERIVED_INDEX_DEFS = [
   },
   {
     key: "idx_avg_m2",
-    label: "Средняя ЗП Минск, м\u00B2",
+    label: "средняя ЗП Минск, м\u00B2",
     unit: "м\u00B2",
     decimals: 2,
     inputs: [DERIVED_KEYS.avgMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
@@ -961,7 +965,7 @@ const DERIVED_INDEX_DEFS = [
   },
   {
     key: "idx_rent_med",
-    label: "Аренда однушки в % от медианной ЗП",
+    label: "аренда однушки в % от медианной ЗП",
     unit: "%",
     decimals: 0,
     inputs: [DERIVED_KEYS.rent, DERIVED_KEYS.rate, DERIVED_KEYS.medMinsk],
@@ -1540,7 +1544,7 @@ function formatNumber(value, digits = 0) {
 }
 
 
-function formatValue(value, meta, percentMode = false) {
+function formatValue(value, meta, percentMode = false, currency = state.currency) {
   if (
     value == null ||
     !Number.isFinite(Number(value))
@@ -1574,7 +1578,7 @@ function formatValue(value, meta, percentMode = false) {
   /* Количество сделок: число без единицы измерения. */
   if (isDealsSeries(meta)) return formatNumber(number, 0);
 
-  const unit = getDisplayUnit(meta);
+  const unit = getDisplayUnit(meta, currency);
 
   /*
    * Доходы (зарплатные ряды): от 0 до 10 — 0,00; от 10 до 100 — 0,0;

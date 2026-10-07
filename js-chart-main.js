@@ -574,6 +574,7 @@ function buildYAxes() {
       {
         type: "value",
         position: "left",
+        scale: true,
         name: "%",
         nameTextStyle: {
           color,
