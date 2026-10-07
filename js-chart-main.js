@@ -1743,13 +1743,38 @@ let mainPercentTimer = null;
 
 function wireDataZoom() {
   chart.on("dataZoom", () => {
-    const option = chart.getOption();
-    const zoom = option && option.dataZoom && option.dataZoom[0];
+    /*
+     * Диапазон читаем из модели dataZoom (без копирования данных всех
+     * рядов, как делает getOption()). Если внутренний метод недоступен —
+     * запасной путь через getOption().
+     */
+    let start = NaN;
+    let end = NaN;
 
-    if (!zoom) return;
+    try {
+      const model = chart.getModel && chart.getModel();
+      const zoomModel = model && model.getComponent("dataZoom", 0);
+      const range =
+        zoomModel && zoomModel.getPercentRange && zoomModel.getPercentRange();
 
-    let start = Number(zoom.start);
-    let end = Number(zoom.end);
+      if (Array.isArray(range)) {
+        start = Number(range[0]);
+        end = Number(range[1]);
+      }
+    } catch (error) {
+      start = NaN;
+      end = NaN;
+    }
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      const option = chart.getOption();
+      const zoom = option && option.dataZoom && option.dataZoom[0];
+
+      if (!zoom) return;
+
+      start = Number(zoom.start);
+      end = Number(zoom.end);
+    }
 
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 

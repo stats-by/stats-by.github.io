@@ -1069,13 +1069,38 @@ function wireSeasonalityDataZoom() {
   if (!seasonalityChart) return;
 
   seasonalityChart.on("dataZoom", () => {
-    const option = seasonalityChart.getOption();
-    const zoom = option && option.dataZoom && option.dataZoom[0];
+    /*
+     * Диапазон читаем из модели dataZoom (без копирования данных рядов,
+     * как делает getOption()). Если внутренний метод недоступен —
+     * запасной путь через getOption().
+     */
+    let start = NaN;
+    let end = NaN;
 
-    if (!zoom) return;
+    try {
+      const model = seasonalityChart.getModel && seasonalityChart.getModel();
+      const zoomModel = model && model.getComponent("dataZoom", 0);
+      const range =
+        zoomModel && zoomModel.getValueRange && zoomModel.getValueRange();
 
-    let start = Math.round(Number(zoom.startValue));
-    let end = Math.round(Number(zoom.endValue));
+      if (Array.isArray(range)) {
+        start = Math.round(Number(range[0]));
+        end = Math.round(Number(range[1]));
+      }
+    } catch (error) {
+      start = NaN;
+      end = NaN;
+    }
+
+    if (!Number.isFinite(start) || !Number.isFinite(end)) {
+      const option = seasonalityChart.getOption();
+      const zoom = option && option.dataZoom && option.dataZoom[0];
+
+      if (!zoom) return;
+
+      start = Math.round(Number(zoom.startValue));
+      end = Math.round(Number(zoom.endValue));
+    }
 
     if (!Number.isFinite(start) || !Number.isFinite(end)) return;
 
