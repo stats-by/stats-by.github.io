@@ -16,15 +16,15 @@
     MIN_DOWN: 0.2,                     /* минимальный первоначальный взнос — 20% цены */
     BACKTEST_MONTHS: 36,               /* окно для коэффициента «медиана / средняя» */
     KEY: {
-      median: "медианная_минск",
-      avg: "средняя_средняя_минск",
-      rate: "курс_usd_курс_usd_byn",
-      prices: ["wikidom_м2_стоимость_м2_однушек", "wikidom_м2_стоимость_м2_двушек",
-               "wikidom_м2_стоимость_м2_трешек"],   /* цена покупки м² — Wikidom */
-      rentTs: "аренда_стоимость_аренды_t_s_by",      /* основной ряд аренды (однушка) */
-      rentRealt: "аренда_стоимость_аренды_realt",    /* только там, где нет t-s.by */
-      refi: "ставка_реф_ставка_рефинансирования",
-      bpm: "бпм_бюджет_прожиточного_минимума_бпм_для_трудоспособного_населения"   /* БПМ, BYN/мес */
+      /* Ключи рядов — из KEY в js-core.js (они же — колонка key в xlsx). */
+      median: KEY.medMinsk,
+      avg: KEY.avgMinsk,
+      rate: KEY.rate,
+      prices: [KEY.wiki1k, KEY.wiki2k, KEY.wiki3k],   /* цена покупки м² — Wikidom */
+      rentTs: KEY.rentTs,                             /* основной ряд аренды (однушка) */
+      rentRealt: KEY.rentRealt,                       /* только там, где нет t-s.by */
+      refi: KEY.refi,
+      bpm: KEY.bpm                                    /* БПМ, BYN/мес */
     }
   };
 
@@ -253,32 +253,26 @@
     ]);
   }
 
-  /* Новое имя параметра; если его нет — старое короткое (старые ссылки). */
-  function pick(q, name, old) {
-    var v = q.get(name);
-    return v != null ? v : q.get(old);
-  }
-
   function restoreFromUrl() {
     var q = new URLSearchParams(window.location.search);
     if (q.get("g") !== "fp") return false;
-    var hold = pick(q, "hold", "h");
+    var hold = q.get("hold");
     if (["pillow", "dep", "usd"].indexOf(hold) >= 0) st.hold = hold;
-    var spv = pick(q, "spread", "s"), sp = Number(spv);
+    var spv = q.get("spread"), sp = Number(spv);
     if (spv != null && sp >= 0 && sp <= 4) st.spread = Math.round(sp);
-    st.rent = pick(q, "rent", "r") === "1";
-    st.cheap = pick(q, "cheap", "d") === "1";
-    st.family = pick(q, "family", "w") === "1";
-    var loan = pick(q, "loan", "l");
+    st.rent = q.get("rent") === "1";
+    st.cheap = q.get("cheap") === "1";
+    st.family = q.get("family") === "1";
+    var loan = q.get("loan");
     if (["annuity", "diff"].indexOf(loan) >= 0) st.loan = loan;
-    var rm = Math.round(Number(pick(q, "rooms", "k"))), ar = parseFloat(pick(q, "area", "a"));
+    var rm = Math.round(Number(q.get("rooms"))), ar = parseFloat(q.get("area"));
     if (rm >= 1 && rm <= 3) { st.rooms = rm; st.area = CFG.AREA[rm]; }
     if (isFinite(ar) && ar >= 10 && ar <= 300) st.area = ar;
-    var inc = pick(q, "income", "i");
+    var inc = q.get("income");
     if (["med", "avg"].indexOf(inc) >= 0) st.income = inc;
-    if ([1.5, 2, 2.5, 3].indexOf(Number(pick(q, "bpm", "b"))) >= 0) st.bpm = Number(pick(q, "bpm", "b"));
+    if ([1.5, 2, 2.5, 3].indexOf(Number(q.get("bpm"))) >= 0) st.bpm = Number(q.get("bpm"));
     /* Те же правила, что у живых полей: ставка — любое число ≥ 0, срок — любое число ≥ 1. */
-    var rt = parseFloat(pick(q, "rate", "p")), yr = parseFloat(pick(q, "term", "y"));
+    var rt = parseFloat(q.get("rate")), yr = parseFloat(q.get("term"));
     if (isFinite(rt) && rt >= 0) st.rate = rt;
     if (isFinite(yr) && yr >= 1) st.years = yr;
     return true;

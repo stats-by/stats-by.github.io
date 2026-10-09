@@ -587,8 +587,8 @@ function wireInfoTip(wrapId, buttonId, tipId) {
 let salaryRegion = "minsk";
 
 const SALARY_KEYS = {
-  minsk: { median: "медианная_минск", avg: "средняя_средняя_минск" },
-  belarus: { median: "медианная_беларусь", avg: "средняя_средняя_по_стране" },
+  minsk: { median: KEY.medMinsk, avg: KEY.avgMinsk },
+  belarus: { median: KEY.medBy, avg: KEY.avgBy },
 };
 
 
@@ -1139,8 +1139,8 @@ document.addEventListener("taxmodechange", (event) => {
   /* Доля 50% берётся не из распределения, а из медианной зарплаты. */
   var MEDIAN_TARGET = 50;
   var MEDIAN_KEYS = {
-    minsk: "медианная_минск",
-    belarus: "медианная_беларусь"
+    minsk: KEY.medMinsk,
+    belarus: KEY.medBy
   };
 
   var SALARY = null;   /* data_salary.json */

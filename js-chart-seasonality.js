@@ -275,10 +275,13 @@ function buildSeasonalityCheckboxPanel() {
     if (groupLabel !== currentGroup) {
       currentGroup = groupLabel;
 
-      const groupTitle = document.createElement("div");
-      groupTitle.className = "check-group-label";
-      groupTitle.textContent = groupLabel;
-      container.appendChild(groupTitle);
+      /* Группа без подписи (курс USD) — без заголовка. */
+      if (groupLabel) {
+        const groupTitle = document.createElement("div");
+        groupTitle.className = "check-group-label";
+        groupTitle.textContent = groupLabel;
+        container.appendChild(groupTitle);
+      }
     }
 
     const row = document.createElement("label");

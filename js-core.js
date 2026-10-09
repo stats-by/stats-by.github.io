@@ -105,75 +105,76 @@ const X_GRID_COLOR = GRID_COLOR;
 const SLIDER_GRID_COLOR = "rgba(255,255,255,0.28)";
 const SLIDER_GRID_WIDTH = 1.5;
 
-/* Ключ ряда «Бюджет прожиточного минимума» в data.json. */
-const BPM_KEY =
-  "бпм_бюджет_прожиточного_минимума_бпм_для_трудоспособного_населения";
+/*
+ * Ключи рядов — это колонка `key` в блоках над таблицами data.xlsx
+ * (они же попадают в data.json и в ссылки «Скопировать ссылку»).
+ * Здесь перечислены только те ключи, на которые завязана логика сайта
+ * (цвета линий, пересчёты, индексы, блок «Первый взнос»).
+ * Подписи, единицы, группы и порядок рядов задаются в xlsx.
+ * Если переименовываете ключ в xlsx — поменяйте его и здесь.
+ */
+const KEY = {
+  medBy: "med-by",
+  avgBy: "avg-by",
+  medMinsk: "med-minsk",
+  avgMinsk: "avg-minsk",
+  minWage: "min-wage",
+  bpm: "bpm",
 
-const GROUP_ORDER = [
-  "Зарплаты",
-  "Курс",
-  "Строительство",
-  "Аренда",
-  "стоимость квартир Realt",
-  "стоимость квартир Wikidom",
-  "Ставка",
-  "Индексы",
-];
+  rate: "usd-rate",
+  refi: "refi",
+
+  rentTs: "rent-ts",
+  rentRealt: "rent-realt",
+
+  realt1k: "realt-1k",
+  realt2k: "realt-2k",
+  realt3k: "realt-3k",
+  realt4k: "realt-4k",
+  realtAdsNew: "realt-ads-new",
+  realtAdsSec: "realt-ads-sec",
+  realtAdsAll: "realt-ads-all",
+  realtDeals: "realt-deals",
+
+  wiki1k: "wiki-1k",
+  wiki2k: "wiki-2k",
+  wiki3k: "wiki-3k",
+  wiki4k: "wiki-4k",
+  wikiAll: "wiki-all",
+  wikiDeals: "wiki-deals",
+  wikiDealsNew: "wiki-deals-new",
+  wikiDealsSec: "wiki-deals-sec",
+
+  buildK: "build-k",
+  build: "build",
+
+  /* Индексы считаются в этом файле (DERIVED_INDEX_DEFS). */
+  idxMedAvgMinsk: "idx-med-avg-minsk",
+  idxMedAvgBy: "idx-med-avg-by",
+  idxMedMinskBy: "idx-med-minsk-by",
+  idxMedM2: "idx-med-m2",
+  idxAvgM2: "idx-avg-m2",
+  idxRentMed: "idx-rent-med",
+};
 
 /*
- * Фиксированный порядок показателей внутри групп.
- * Для зарплат он соответствует порядку в интерфейсе:
- * медианная страна -> средняя страна -> медианная Минск ->
- * средняя Минск -> минимальная.
+ * Группы (колонка `группа` в xlsx): код -> подпись в панели показателей.
+ * Порядок групп в панели — порядок ключей здесь.
+ * Пустая подпись = группа без заголовка (курс USD: самый верх панели).
  */
-const CHECKBOX_ORDER = [
-  // Зарплаты
-  "медианная_беларусь",
-  "средняя_средняя_по_стране",
-  "медианная_минск",
-  "средняя_средняя_минск",
-  "мин_зп_минимальная_по_стране",
-  BPM_KEY,
+const GROUPS = {
+  rate: "",
+  salary: "Зарплаты",
+  construction: "Строительство",
+  rent: "Аренда",
+  realt: "стоимость квартир Realt",
+  wikidom: "стоимость квартир Wikidom",
+  refinancing: "Ставка",
+  index: "Индексы",
+};
 
-  // Курс
-  "курс_usd_курс_usd_byn",
+const GROUP_ORDER = Object.keys(GROUPS);
 
-  // Строительство
-  "строительство_год_тыс",
-  "строительство_год",
-
-  // Аренда
-  "аренда_стоимость_аренды_t_s_by",
-  "аренда_стоимость_аренды_realt",
-
-  // стоимость квартир Realt
-  "realt_м2_стоимость_м2_однушек",
-  "realt_м2_стоимость_м2_двушек",
-  "realt_м2_стоимость_м2_трешек",
-  "realt_м2_стоимость_м2_четырешек",
-  "realt_м2_объявления_новостройки",
-  "realt_м2_объявления_вторичка",
-  "realt_м2_объявления_новостройки_вторичка",
-  "realt_сделки_количество_сделок_новостройки_вторичка",
-
-  // стоимость квартир Wikidom
-  "wikidom_м2_стоимость_м2_однушек",
-  "wikidom_м2_стоимость_м2_двушек",
-  "wikidom_м2_стоимость_м2_трешек",
-  "wikidom_м2_стоимость_м2_четырешек",
-  "wikidom_м2_стоимость_м2_общая",
-  "wikidom_сделки_количество_сделок_новостройки_вторичка",
-  "wikidom_сделки_количество_сделок_новостройки",
-  "wikidom_сделки_количество_сделок_вторичка",
-
-  // Индексы
-  "idx_med_avg_minsk",
-  "idx_med_avg_by",
-  "idx_med_minsk_by",
-  "idx_med_m2",
-  "idx_avg_m2",
-  "idx_rent_med",
-];
 
 
 /* ============================================================
@@ -191,7 +192,7 @@ const state = {
   visible: {},
 
   /* Показатель, выбранный для графика сезонности. */
-  seasonalityKey: "курс_usd_курс_usd_byn",
+  seasonalityKey: KEY.rate,
 
   /* Годы, отображаемые на графике сезонности. */
   seasonalityYears: new Set(),
@@ -341,60 +342,61 @@ function getStableSeriesIndex(meta) {
  */
 const SERIES_STYLE = {
   /* Зарплаты */
-  "средняя_средняя_минск":        { color: "#E14F63", dash: "solid" },
-  "средняя_средняя_по_стране":    { color: "#E14F63", dash: "dashed" },
-  "медианная_минск":              { color: "#F2B84B", dash: "solid" },
-  "медианная_беларусь":           { color: "#F2B84B", dash: "dashed" },
-  "мин_зп_минимальная_по_стране": { color: "#8A8F98", dash: "solid" },
-  [BPM_KEY]:                      { color: "#FFFFFF", dash: "solid", width: 1.5 },
+  [KEY.avgMinsk]:  { color: "#E14F63", dash: "solid" },
+  [KEY.avgBy]:     { color: "#E14F63", dash: "dashed" },
+  [KEY.medMinsk]:  { color: "#F2B84B", dash: "solid" },
+  [KEY.medBy]:     { color: "#F2B84B", dash: "dashed" },
+  [KEY.minWage]:   { color: "#8A8F98", dash: "solid" },
+  [KEY.bpm]:       { color: "#FFFFFF", dash: "solid", width: 1.5 },
 
   /* Курс */
-  "курс_usd_курс_usd_byn":        { color: "#3DDC84", dash: "solid" },
+  [KEY.rate]:      { color: "#3DDC84", dash: "solid" },
 
   /* Аренда */
-  "аренда_стоимость_аренды_t_s_by": { color: "#35D0E8", dash: "solid" },
-  "аренда_стоимость_аренды_realt":  { color: "#35D0E8", dash: "dashed" },
+  [KEY.rentTs]:    { color: "#35D0E8", dash: "solid" },
+  [KEY.rentRealt]: { color: "#35D0E8", dash: "dashed" },
 
   /* Стоимость м²: Realt — сплошная, Wikidom — пунктир */
-  "realt_м2_стоимость_м2_однушек":   { color: "#4C8DFF", dash: "solid" },
-  "wikidom_м2_стоимость_м2_однушек": { color: "#4C8DFF", dash: "dashed" },
-  "realt_м2_стоимость_м2_двушек":    { color: "#FF6FB5", dash: "solid" },
-  "wikidom_м2_стоимость_м2_двушек":  { color: "#FF6FB5", dash: "dashed" },
-  "realt_м2_стоимость_м2_трешек":    { color: "#B07CFF", dash: "solid" },
-  "wikidom_м2_стоимость_м2_трешек":  { color: "#B07CFF", dash: "dashed" },
-  "realt_м2_стоимость_м2_четырешек":   { color: "#FF9A52", dash: "solid" },
-  "wikidom_м2_стоимость_м2_четырешек": { color: "#FF9A52", dash: "dashed" },
-  "wikidom_м2_стоимость_м2_общая":     { color: "#A8D84F", dash: "solid" },
+  [KEY.realt1k]:   { color: "#4C8DFF", dash: "solid" },
+  [KEY.wiki1k]:    { color: "#4C8DFF", dash: "dashed" },
+  [KEY.realt2k]:   { color: "#FF6FB5", dash: "solid" },
+  [KEY.wiki2k]:    { color: "#FF6FB5", dash: "dashed" },
+  [KEY.realt3k]:   { color: "#B07CFF", dash: "solid" },
+  [KEY.wiki3k]:    { color: "#B07CFF", dash: "dashed" },
+  [KEY.realt4k]:   { color: "#FF9A52", dash: "solid" },
+  [KEY.wiki4k]:    { color: "#FF9A52", dash: "dashed" },
+  [KEY.wikiAll]:   { color: "#A8D84F", dash: "solid" },
 
   /* Объявления Realt */
-  "realt_м2_объявления_новостройки":         { color: "#7FD6C2", dash: "solid" },
-  "realt_м2_объявления_вторичка":            { color: "#7FD6C2", dash: "dashed" },
-  "realt_м2_объявления_новостройки_вторичка": { color: "#7FD6C2", dash: "dotted" },
+  [KEY.realtAdsNew]: { color: "#7FD6C2", dash: "solid" },
+  [KEY.realtAdsSec]: { color: "#7FD6C2", dash: "dashed" },
+  [KEY.realtAdsAll]: { color: "#7FD6C2", dash: "dotted" },
 
   /* Сделки */
-  "realt_сделки_количество_сделок_новостройки_вторичка":   { color: "#D6D96B", dash: "solid" },
-  "wikidom_сделки_количество_сделок_новостройки_вторичка": { color: "#D6D96B", dash: "dashed" },
-  "wikidom_сделки_количество_сделок_новостройки":          { color: "#E8A33D", dash: "solid" },
-  "wikidom_сделки_количество_сделок_вторичка":             { color: "#E8A33D", dash: "dashed" },
+  [KEY.realtDeals]:    { color: "#D6D96B", dash: "solid" },
+  [KEY.wikiDeals]:     { color: "#D6D96B", dash: "dashed" },
+  [KEY.wikiDealsNew]:  { color: "#E8A33D", dash: "solid" },
+  [KEY.wikiDealsSec]:  { color: "#E8A33D", dash: "dashed" },
 
   /* Строительство */
-  "строительство_год_тыс": { color: "#C98B5B", dash: "solid" },
-  "строительство_год":     { color: "#C98B5B", dash: "dashed" },
+  [KEY.buildK]:    { color: "#C98B5B", dash: "solid" },
+  [KEY.build]:     { color: "#C98B5B", dash: "dashed" },
 
   /* Индексы */
-  "idx_med_avg_minsk": { color: "#9BE15D", dash: "solid" },
-  "idx_med_avg_by":    { color: "#9BE15D", dash: "dashed" },
-  "idx_med_minsk_by":  { color: "#7FDBFF", dash: "solid" },
-  "idx_med_m2":        { color: "#FF8FA3", dash: "solid" },
-  "idx_avg_m2":        { color: "#FF8FA3", dash: "dashed" },
-  "idx_rent_med":      { color: "#E5E5E5", dash: "solid" },
+  [KEY.idxMedAvgMinsk]: { color: "#9BE15D", dash: "solid" },
+  [KEY.idxMedAvgBy]:    { color: "#9BE15D", dash: "dashed" },
+  [KEY.idxMedMinskBy]:  { color: "#7FDBFF", dash: "solid" },
+  [KEY.idxMedM2]:       { color: "#FF8FA3", dash: "solid" },
+  [KEY.idxAvgM2]:       { color: "#FF8FA3", dash: "dashed" },
+  [KEY.idxRentMed]:     { color: "#E5E5E5", dash: "solid" },
 };
 
 
 /* Ряды, на которых точки (маркеры) не рисуются никогда. */
 const NO_MARKER_KEYS = new Set([
-  "аренда_стоимость_аренды_t_s_by",
+  KEY.rentTs,
 ]);
+
 
 
 /* Цвет ряда: из SERIES_STYLE, иначе — из общей палитры по индексу. */
@@ -451,90 +453,45 @@ function applySwatchDash(element, dash, color) {
    Группы
    ============================================================ */
 
+/*
+ * Подпись группы в панели показателей. Пустая строка — группа без
+ * заголовка. Неизвестный код группы показываем как есть (чтобы
+ * опечатка в xlsx была заметна).
+ */
 function getGroupLabel(meta) {
-  if (!meta) {
+  if (!meta || !meta.group) {
     return "Прочее";
   }
 
-  /*
-   * В build_data.py группа уже может быть указана.
-   * Если её нет — определяем по названию листа.
-   */
-  if (meta.group) {
-    const groupMap = {
-      salary: "Зарплаты",
-      rate: "Курс",
-      realt: "стоимость квартир Realt",
-      wikidom: "стоимость квартир Wikidom",
-      rent: "Аренда",
-      construction: "Строительство",
-      refinancing: "Ставка",
-      index: "Индексы",
-    };
+  return Object.prototype.hasOwnProperty.call(GROUPS, meta.group)
+    ? GROUPS[meta.group]
+    : meta.group;
+}
 
-    return groupMap[meta.group] || meta.group;
-  }
 
-  const sheet = String(meta.sheet || "").toLowerCase();
-
-  if (sheet.includes("средняя") ||
-      sheet.includes("медианная") ||
-      sheet.includes("мин зп")) {
-    return "Зарплаты";
-  }
-
-  if (sheet.includes("курс")) {
-    return "Курс";
-  }
-
-  if (sheet.includes("realt")) {
-    return "стоимость квартир Realt";
-  }
-
-  if (sheet.includes("wikidom")) {
-    return "стоимость квартир Wikidom";
-  }
-
-  if (sheet.includes("аренда")) {
-    return "Аренда";
-  }
-
-  if (sheet.includes("строительство")) {
-    return "Строительство";
-  }
-
-  if (sheet.includes("ставка")) {
-    return "Ставка";
-  }
-
-  return "Прочее";
+/* Количество сделок — штуки, а не деньги: валюта на них не влияет. */
+function isDealsSeries(meta) {
+  return !!meta && meta.unit === "шт.";
 }
 
 
 /*
- * Группа определяет поведение ряда при переключении валюты.
+ * Группа определяет поведение ряда при переключении валюты:
+ * salary — исходно BYN, housing — исходно USD, rate — курс, other — без пересчёта.
  */
-function isDealsSeries(meta) {
-  return !!meta && String(meta.key || "").includes("сделок");
-}
-
-
 function getInternalGroup(meta) {
-  /* Количество сделок — штуки, а не деньги: валюта на них не влияет. */
   if (isDealsSeries(meta)) return "other";
 
-  const label = getGroupLabel(meta);
-
-  switch (label) {
-    case "Зарплаты":
+  switch (meta && meta.group) {
+    case "salary":
       return "salary";
 
-    case "стоимость квартир Realt":
-    case "стоимость квартир Wikidom":
-    case "Аренда":
+    case "realt":
+    case "wikidom":
+    case "rent":
       return "housing";
 
-    case "Курс":
+    case "rate":
       return "rate";
 
     default:
@@ -595,29 +552,16 @@ function fixSquare(text) {
 
 
 /*
- * Подпись показателя: «м2» -> «м²» и первая буква строчная.
- * Исключение — БПМ. Аббревиатуры («ЗП», «USD…») не трогаем.
+ * Подписи берём из xlsx как есть, только «м2» -> «м²».
+ * Регистр и формулировки правятся в xlsx.
  */
-function fixLabel(text, key) {
+function fixLabel(text) {
   if (text == null || text === "") return text;
 
-  const fixed = fixSquare(text);
-
-  if (key === BPM_KEY) return fixed;
-
-  const first = fixed.charAt(0);
-  const second = fixed.charAt(1);
-  const secondIsUpper = second !== "" && second !== second.toLowerCase();
-
-  if (first !== first.toLowerCase() && !secondIsUpper) {
-    return first.toLowerCase() + fixed.slice(1);
-  }
-
-  return fixed;
+  return fixSquare(text);
 }
 
-function validateData(data) {
-  if (!data || typeof data !== "object") {
+function validateData(data) {  if (!data || typeof data !== "object") {
     throw new Error("data.json содержит некорректный JSON.");
   }
 
@@ -633,24 +577,10 @@ function validateData(data) {
     throw new Error("В data.json отсутствует массив series_meta.");
   }
 
-  /*
-   * БПМ: в data.json у ряда группа "other" и нет единицы измерения.
-   * Приводим его к зарплатам (BYN, пересчёт в USD как у зарплат).
-   */
+  /* Подписи: «м2» -> «м²» (остальное — как в xlsx). */
   data.series_meta.forEach((meta) => {
-    if (meta.key === BPM_KEY) {
-      meta.label = "Бюджет Прожиточного Минимума (БПМ)";
-      meta.tooltip_label = "прожиточный минимум (БПМ)";
-      meta.group = "salary";
-      meta.unit = "BYN";
-      meta.currency = "BYN";
-    }
-  });
-
-  /* Подписи: «м2» -> «м²», первая буква строчная (кроме БПМ). */
-  data.series_meta.forEach((meta) => {
-    meta.label = fixLabel(meta.label, meta.key);
-    meta.tooltip_label = fixLabel(meta.tooltip_label, meta.key);
+    meta.label = fixLabel(meta.label);
+    meta.tooltip_label = fixLabel(meta.tooltip_label);
 
     if (meta.unit) {
       meta.unit = fixSquare(meta.unit);
@@ -669,7 +599,10 @@ function validateData(data) {
    * Если какого-то ряда нет — просто предупреждаем.
    */
   data.series_meta.forEach((meta) => {
-    if (!data.series.hasOwnProperty(meta.key)) {
+    const inSeries = data.series.hasOwnProperty(meta.key);
+    const inAnnual = data.annual_series.hasOwnProperty(meta.key);
+
+    if (!inSeries && !inAnnual) {
       console.warn(
         `series_meta содержит ${meta.key}, но самого ряда нет в series.`
       );
@@ -898,7 +831,7 @@ const Tax = (function () {
     isTaxedMeta(meta) {
       return (
         !!meta &&
-        meta.key !== BPM_KEY &&
+        meta.key !== KEY.bpm &&
         getInternalGroup(meta) === "salary"
       );
     },
@@ -930,63 +863,59 @@ const Tax = (function () {
    по нему график ставит маркеры и пометку «аппр.».
    ============================================================ */
 
-const DERIVED_KEYS = {
-  medMinsk: "медианная_минск",
-  avgMinsk: "средняя_средняя_минск",
-  medBy: "медианная_беларусь",
-  avgBy: "средняя_средняя_по_стране",
-  rate: "курс_usd_курс_usd_byn",
-  price1: "realt_м2_стоимость_м2_однушек",
-  rent: "аренда_стоимость_аренды_t_s_by",
-};
-
 const DERIVED_INDEX_DEFS = [
   {
-    key: "idx_med_avg_minsk",
+    key: KEY.idxMedAvgMinsk,
+    order: 1,
     label: "медианная ЗП в % от средней, Минск",
     unit: "%",
     decimals: 1,
-    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.avgMinsk],
+    inputs: [KEY.medMinsk, KEY.avgMinsk],
     calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
   },
   {
-    key: "idx_med_avg_by",
+    key: KEY.idxMedAvgBy,
+    order: 2,
     label: "медианная ЗП в % от средней, страна",
     unit: "%",
     decimals: 1,
-    inputs: [DERIVED_KEYS.medBy, DERIVED_KEYS.avgBy],
+    inputs: [KEY.medBy, KEY.avgBy],
     calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
   },
   {
-    key: "idx_med_minsk_by",
+    key: KEY.idxMedMinskBy,
+    order: 3,
     label: "медианная ЗП: Минск в % от страны",
     unit: "%",
     decimals: 1,
-    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.medBy],
+    inputs: [KEY.medMinsk, KEY.medBy],
     calc: (v) => (v[1] ? (v[0] / v[1]) * 100 : null),
   },
   {
-    key: "idx_med_m2",
+    key: KEY.idxMedM2,
+    order: 4,
     label: "медианная ЗП Минск, м\u00B2",
     unit: "м\u00B2",
     decimals: 2,
-    inputs: [DERIVED_KEYS.medMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
+    inputs: [KEY.medMinsk, KEY.rate, KEY.realt1k],
     calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
   },
   {
-    key: "idx_avg_m2",
+    key: KEY.idxAvgM2,
+    order: 5,
     label: "средняя ЗП Минск, м\u00B2",
     unit: "м\u00B2",
     decimals: 2,
-    inputs: [DERIVED_KEYS.avgMinsk, DERIVED_KEYS.rate, DERIVED_KEYS.price1],
+    inputs: [KEY.avgMinsk, KEY.rate, KEY.realt1k],
     calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
   },
   {
-    key: "idx_rent_med",
+    key: KEY.idxRentMed,
+    order: 6,
     label: "аренда однушки в % от медианной ЗП",
     unit: "%",
     decimals: 0,
-    inputs: [DERIVED_KEYS.rent, DERIVED_KEYS.rate, DERIVED_KEYS.medMinsk],
+    inputs: [KEY.rentTs, KEY.rate, KEY.medMinsk],
     calc: (v, f) => (v[2] ? ((v[0] * v[1]) / (v[2] * f)) * 100 : null),
   },
 ];
@@ -1000,6 +929,7 @@ function addDerivedIndices(data) {
       label: def.label,
       tooltip_label: def.label,
       group: "index",
+      order: def.order,
       unit: def.unit,
       decimals: def.decimals,
       frequency: "monthly",
@@ -1073,33 +1003,7 @@ function getDerivedData(meta) {
    ============================================================ */
 
 function getUsdRateSeries() {
-  /*
-   * build_data.py создаёт этот ряд динамически.
-   *
-   * Если ключ известен напрямую — используем его.
-   * Иначе ищем по metadata.
-   */
-
-  if (DATA.series["курс_usd_курс_usd_byn"]) {
-    return DATA.series["курс_usd_курс_usd_byn"];
-  }
-
-  const meta = getSeriesMeta().find((item) => {
-    const label = String(item.label || "").toLowerCase();
-    const unit = String(item.unit || "").toLowerCase();
-
-    return (
-      label.includes("курс usd") ||
-      label.includes("usd/byn") ||
-      unit.includes("byn/usd")
-    );
-  });
-
-  if (meta && DATA.series[meta.key]) {
-    return DATA.series[meta.key];
-  }
-
-  return null;
+  return (DATA.series && DATA.series[KEY.rate]) || null;
 }
 
 
@@ -1702,30 +1606,23 @@ function getSeriesLabel(meta) {
    ============================================================ */
 
 function sortMetas(metas) {
+  const groupIndex = (meta) => {
+    const index = GROUP_ORDER.indexOf(meta.group);
+
+    return index === -1 ? 999 : index;
+  };
+
+  const orderOf = (meta) =>
+    Number.isFinite(Number(meta.order)) ? Number(meta.order) : 999;
+
   return metas.slice().sort((a, b) => {
-    const groupA = getGroupLabel(a);
-    const groupB = getGroupLabel(b);
-
-    const indexA = GROUP_ORDER.indexOf(groupA);
-    const indexB = GROUP_ORDER.indexOf(groupB);
-
-    const normalizedA = indexA === -1 ? 999 : indexA;
-    const normalizedB = indexB === -1 ? 999 : indexB;
-
-    if (normalizedA !== normalizedB) {
-      return normalizedA - normalizedB;
+    if (groupIndex(a) !== groupIndex(b)) {
+      return groupIndex(a) - groupIndex(b);
     }
 
-    const orderA = CHECKBOX_ORDER.indexOf(a.key);
-    const orderB = CHECKBOX_ORDER.indexOf(b.key);
-
-    if (orderA !== -1 || orderB !== -1) {
-      const normalizedOrderA = orderA === -1 ? 999 : orderA;
-      const normalizedOrderB = orderB === -1 ? 999 : orderB;
-
-      if (normalizedOrderA !== normalizedOrderB) {
-        return normalizedOrderA - normalizedOrderB;
-      }
+    /* Порядок внутри группы — колонка `порядок` в xlsx. */
+    if (orderOf(a) !== orderOf(b)) {
+      return orderOf(a) - orderOf(b);
     }
 
     return String(a.label || a.key).localeCompare(
@@ -2101,7 +1998,7 @@ const ZOOM_SHADOW_ID = "__zoom_shadow__";
    isNum — верхним блокам (js-app.js).
    ============================================================ */
 
-const RATE_KEY = "курс_usd_курс_usd_byn";
+const RATE_KEY = KEY.rate;
 
 /*
  * Месяцы, исключаемые из расчёта медианного изменения курса USD
@@ -2134,19 +2031,19 @@ function median(values) {
 
 /* Показатели, которых нет в графике сезонности (кроме группы «Строительство»). */
 const SEASONALITY_HIDDEN_KEYS = [
-  "медианная_беларусь",
-  "медианная_минск",
-  BPM_KEY,
-  "мин_зп_минимальная_по_стране",
-  "realt_м2_стоимость_м2_трешек",
-  "realt_м2_стоимость_м2_четырешек",
-  "wikidom_м2_стоимость_м2_трешек",
-  "wikidom_м2_стоимость_м2_четырешек",
+  KEY.medBy,
+  KEY.medMinsk,
+  KEY.bpm,
+  KEY.minWage,
+  KEY.realt3k,
+  KEY.realt4k,
+  KEY.wiki3k,
+  KEY.wiki4k,
 ];
 
 function isSeasonalityMeta(meta) {
-  return getGroupLabel(meta) !== "Строительство" &&
-    getGroupLabel(meta) !== "Индексы" &&
+  return meta.group !== "construction" &&
+    meta.group !== "index" &&
     !SEASONALITY_HIDDEN_KEYS.includes(meta.key);
 }
 
@@ -2161,87 +2058,31 @@ function isNum(value) {
    ============================================================
    Формат ссылок (все блоки):
      • списки и периоды разделены "_" (не запятой, чтобы не было %2C);
-     • ряды — короткие латинские ID (SERIES_IDS) вместо кириллических
-       ключей data.json (ключи в данных не меняются);
+     • ряды — ключи из колонки `key` в xlsx (короткие латинские);
      • годы сезонности — диапазоны: 2019-2021_2023-2026;
      • месяцы сезонности — с 1: r=3-8;
      • хвост #... в ссылку не попадает.
-   Старые ссылки (кириллические ключи, запятые, r=0,11, короткие
-   имена параметров «Первого взноса») продолжают открываться.
    ============================================================ */
 
-const SERIES_IDS = {
-  "медианная_минск": "med-minsk",
-  "медианная_беларусь": "med-by",
-  "средняя_средняя_минск": "avg-minsk",
-  "средняя_средняя_по_стране": "avg-by",
-  "мин_зп_минимальная_по_стране": "min-wage",
-  [BPM_KEY]: "bpm",
-  "курс_usd_курс_usd_byn": "usd-rate",
-  "аренда_стоимость_аренды_t_s_by": "rent-ts",
-  "аренда_стоимость_аренды_realt": "rent-realt",
-  "realt_м2_стоимость_м2_однушек": "realt-1k",
-  "realt_м2_стоимость_м2_двушек": "realt-2k",
-  "realt_м2_стоимость_м2_трешек": "realt-3k",
-  "realt_м2_стоимость_м2_четырешек": "realt-4k",
-  "wikidom_м2_стоимость_м2_однушек": "wiki-1k",
-  "wikidom_м2_стоимость_м2_двушек": "wiki-2k",
-  "wikidom_м2_стоимость_м2_трешек": "wiki-3k",
-  "wikidom_м2_стоимость_м2_четырешек": "wiki-4k",
-  "wikidom_м2_стоимость_м2_общая": "wiki-all",
-  "realt_м2_объявления_новостройки": "realt-ads-new",
-  "realt_м2_объявления_вторичка": "realt-ads-sec",
-  "realt_м2_объявления_новостройки_вторичка": "realt-ads-all",
-  "realt_сделки_количество_сделок_новостройки_вторичка": "realt-deals",
-  "wikidom_сделки_количество_сделок_новостройки_вторичка": "wiki-deals",
-  "wikidom_сделки_количество_сделок_новостройки": "wiki-deals-new",
-  "wikidom_сделки_количество_сделок_вторичка": "wiki-deals-sec",
-  "строительство_год_тыс": "build-k",
-  "строительство_год": "build",
-  "idx_med_avg_minsk": "idx-med-avg-minsk",
-  "idx_med_avg_by": "idx-med-avg-by",
-  "idx_med_minsk_by": "idx-med-minsk-by",
-  "idx_med_m2": "idx-med-m2",
-  "idx_avg_m2": "idx-avg-m2",
-  "idx_rent_med": "idx-rent-med",
-};
-
-
-/* Ключ ряда -> ID для ссылки. Новый ряд без записи: ключ с "-" вместо "_". */
+/* Ключ ряда в ссылке — это и есть ключ из xlsx. */
 function seriesId(key) {
-  return SERIES_IDS[key] || String(key).replace(/_/g, "-");
+  return String(key);
 }
 
 
-/* ID (или старый полный ключ) -> ключ ряда в data.json, иначе null. */
+/* Ключ ряда из ссылки -> ключ в data.json, иначе null. */
 function keyFromSeriesToken(token) {
   const value = String(token == null ? "" : token).trim();
 
-  if (!value) return null;
-
-  const metas = getSeriesMeta();
-
-  if (metas.some((meta) => meta.key === value)) return value;
-
-  const found = metas.find((meta) => seriesId(meta.key) === value);
-
-  return found ? found.key : null;
+  return getSeriesMeta().some((meta) => meta.key === value) ? value : null;
 }
 
 
-/* Список рядов из ссылки: "a-b_c-d" (новый) или "ключ1,ключ2" (старый). */
+/* Список рядов из ссылки: "a-b_c-d". */
 function parseSeriesList(value) {
-  if (!value) return [];
-
-  /* Один ряд: ID или старый ключ (в нём могут быть "_"). */
-  const single = keyFromSeriesToken(value);
-
-  if (single) return [single];
-
-  const tokens = value.includes(",") ? value.split(",") : value.split("_");
   const out = [];
 
-  tokens.forEach((token) => {
+  String(value || "").split("_").forEach((token) => {
     const key = keyFromSeriesToken(token);
 
     if (key && !out.includes(key)) out.push(key);
@@ -2273,11 +2114,11 @@ function formatYearRanges(years) {
 }
 
 
-/* "2019-2021_2023" (или старое "2019,2020") -> [2019,2020,2021,2023]. */
+/* "2019-2021_2023" -> [2019,2020,2021,2023]. */
 function parseYearRanges(value) {
   const out = [];
 
-  String(value || "").split(/[_,]/).forEach((part) => {
+  String(value || "").split("_").forEach((part) => {
     const match = /^(\d{4})(?:-(\d{4}))?$/.exec(part.trim());
 
     if (!match) return;
@@ -2295,26 +2136,18 @@ function parseYearRanges(value) {
 }
 
 
-/* "3-8" (месяцы с 1) или старое "2,7" (с 0) -> [2, 7] (индексы с 0) или null. */
+/* "3-8" (месяцы с 1) -> [2, 7] (индексы с 0) или null. */
 function parseMonthRange(value) {
   if (!value) return null;
 
-  let parts;
-  let shift = 0;
-
-  if (value.includes(",")) {
-    parts = value.split(",");
-  } else {
-    parts = value.split("-");
-    shift = 1;
-  }
+  const parts = value.split("-");
 
   if (parts.length !== 2 || parts.some((part) => part.trim() === "")) {
     return null;
   }
 
-  const from = Number(parts[0]) - shift;
-  const to = Number(parts[1]) - shift;
+  const from = Number(parts[0]) - 1;
+  const to = Number(parts[1]) - 1;
 
   return Number.isInteger(from) && Number.isInteger(to) ? [from, to] : null;
 }

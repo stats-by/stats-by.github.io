@@ -40,12 +40,15 @@ function buildCheckboxPanel() {
     if (groupLabel !== currentGroup) {
       currentGroup = groupLabel;
 
-      const groupTitle = document.createElement("div");
+      /* Группа без подписи (курс USD) — без заголовка. */
+      if (groupLabel) {
+        const groupTitle = document.createElement("div");
 
-      groupTitle.className = "check-group-label";
-      groupTitle.textContent = groupLabel;
+        groupTitle.className = "check-group-label";
+        groupTitle.textContent = groupLabel;
 
-      container.appendChild(groupTitle);
+        container.appendChild(groupTitle);
+      }
     }
 
     const row = document.createElement("label");
@@ -138,10 +141,10 @@ function initializeVisibility() {
    *   - стоимость м² однушек Realt
    */
   const defaultKeys = new Set([
-    "средняя_средняя_минск",
-    "медианная_минск",
-    "аренда_стоимость_аренды_t_s_by",
-    "realt_м2_стоимость_м2_однушек",
+    KEY.avgMinsk,
+    KEY.medMinsk,
+    KEY.rentTs,
+    KEY.realt1k,
   ]);
 
   metas.forEach((meta) => {
@@ -1082,7 +1085,7 @@ function buildSliderStyle(withShadow) {
    более чем на 12 месяцев — берём её.
    ============================================================ */
 
-const ZOOM_SHADOW_PREFERRED_KEY = "средняя_средняя_минск";
+const ZOOM_SHADOW_PREFERRED_KEY = KEY.avgMinsk;
 const ZOOM_SHADOW_TOLERANCE_MONTHS = 12;
 
 function buildZoomShadowSeries(seriesList) {
