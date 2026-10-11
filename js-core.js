@@ -10,7 +10,7 @@
      • состояние (state, DATA, chart, seasonalityChart);
      • метаданные рядов, группы, цвета;
      • загрузка и проверка data.json;
-     • налоги (Tax): режим «до / после вычета», ставка, формула;
+     • налоги (Tax): режим «до / после вычета», ставки по годам, формула;
      • даты, единицы, конвертация валют и налогов
        (convertMonthlyValues), годовые ряды, интерполяция, проценты;
      • форматирование чисел;
@@ -164,12 +164,12 @@ const KEY = {
  */
 const GROUPS = {
   rate: "",
+  refinancing: "Ставки",
   salary: "Зарплаты",
-  construction: "Строительство",
   rent: "Аренда",
   realt: "стоимость квартир Realt",
   wikidom: "стоимость квартир Wikidom",
-  refinancing: "Ставка",
+  construction: "Строительство",
   index: "Индексы",
 };
 
@@ -561,7 +561,8 @@ function fixLabel(text) {
   return fixSquare(text);
 }
 
-function validateData(data) {  if (!data || typeof data !== "object") {
+function validateData(data) {
+  if (!data || typeof data !== "object") {
     throw new Error("data.json содержит некорректный JSON.");
   }
 
@@ -759,14 +760,37 @@ function getRawMonthlyValues(meta) {
    налогов. Tax — единственное место, где живут режим сайта, ставки
    и формула пересчёта:
 
-     нетто = брутто × (1 − ФСЗН 1%) × (1 − подоходный 13%)
+     нетто = брутто × (1 − ФСЗН 1%) × (1 − подоходный налог)
 
-   Подоходный налог 13% берётся с суммы после взноса в ФСЗН
-   (1% с работника). Стандартные налоговые вычеты не учитываются.
-   Ставка принята единой для всех лет.
+   Подоходный налог берётся с суммы после взноса в ФСЗН (1% с
+   работника). Стандартные и детские вычеты не учитываются:
+   считаем «обычного работника» с зарплатой, равной ряду на графике
+   (медианной, средней или минимальной) в каждый месяц.
+
+   Ставка зависит от времени (она считается для каждого месяца):
+
+     • 2000 – 2008: прогрессивная шкала 9% / 15% / 20% / 25% / 30%.
+       Пороги годового дохода менялись несколько раз в год (SCALES).
+       Годовой доход «обычного работника» = среднее значение ряда за
+       календарный год × 12 (за вычетом ФСЗН), по нему берётся
+       эффективная ставка шкалы — общая для всех месяцев этого года;
+     • 2009 – 2014: единая ставка 12%;
+     • с 2015: единая ставка 13%.
+
+   Повышенные ставки 25% и 30% на доходы свыше 350 000 BYN в год
+   (с 2026) сюда не входят: медианная и средняя зарплата до них не
+   доходят, поэтому для сайта ставка 2026 года — 13%.
+
+   Источники: шкалы 1999–2019 — Министерство по налогам и сборам РБ
+   (приказ ГНК № 46 от 23.03.1999 и постановления МНС к нему);
+   12% с 01.01.2009 — Закон «О подоходном налоге с физических лиц»;
+   13% с 01.01.2015 — Закон об увеличении ставки (источник
+   финансирования «семейного капитала»).
 
    Потребители обращаются к Tax напрямую (без проверок наличия):
      • convertMonthlyValues (ниже) — зарплатные ряды обоих графиков;
+     • getDerivedData (ниже) — индексы «ЗП, м²» и «аренда в % от ЗП»;
+     • js-firstpayment.js — Tax.factorsFor для накоплений по месяцам;
      • renderMedianBlock, «Распределение доходов», buildDeepLinkUrl
        (js-app.js) — Tax.apply / Tax.label / Tax.getMode.
 
@@ -780,9 +804,59 @@ function getRawMonthlyValues(meta) {
    ============================================================ */
 
 const Tax = (function () {
-  const INCOME_TAX = 0.13;
   const PENSION_FUND = 0.01;
-  const FACTOR = (1 - PENSION_FUND) * (1 - INCOME_TAX);
+
+  /* Единые ставки: с какого месяца какая. */
+  const FLAT_RATES = [
+    { from: "2009-01", rate: 0.12 },
+    { from: "2015-01", rate: 0.13 },
+  ];
+
+  /* Ставки прогрессивной шкалы до 2009 года (по возрастанию дохода). */
+  const SCALE_RATES = [0.09, 0.15, 0.20, 0.25, 0.30];
+
+  /*
+   * Границы ступеней шкалы: [с какого месяца, [до 9%, до 15%, до 20%, до 25%]].
+   * Доход — годовой, нарастающим итогом. В источнике пороги — в рублях
+   * образца 2000 года; в данных сайта деньги пересчитаны в современные
+   * рубли (деноминация 2016 года, 1 : 10 000), поэтому делим на 10 000.
+   */
+  const SCALES_OLD_RUB = [
+    ["2000-01", [528000, 1320000, 1848000, 2376000]],
+    ["2000-05", [592080, 1480200, 2072280, 2664360]],
+    ["2000-10", [652080, 1630200, 2282280, 2934360]],
+    ["2001-01", [864000, 2160000, 3024000, 3888000]],
+    ["2001-03", [1284000, 3210000, 4494000, 5778000]],
+    ["2001-07", [1500000, 3750000, 5250000, 6750000]],
+    ["2001-12", [1549920, 3874800, 5424720, 6974640]],
+    ["2002-01", [2400000, 6000000, 8400000, 10800000]],
+    ["2002-09", [2488080, 6220200, 8708280, 11196360]],
+    ["2002-12", [2506080, 6265200, 8771280, 11277360]],
+    ["2003-01", [2880000, 7200000, 10080000, 12960000]],
+    ["2003-03", [3139920, 7849800, 10989720, 14129640]],
+    ["2003-05", [3252000, 8130000, 11382000, 14634000]],
+    ["2003-10", [3402000, 8505000, 11907000, 15309000]],
+    ["2004-01", [3960000, 9900000, 13860000, 17820000]],
+    ["2004-02", [4180080, 10450200, 14630280, 18810360]],
+    ["2004-04", [4450080, 11125200, 15575280, 20025360]],
+    ["2004-11", [4650000, 11625000, 16275000, 20925000]],
+    ["2005-01", [5760000, 14400000, 20160000, 25920000]],
+    ["2005-04", [6030000, 15075000, 21105000, 27135000]],
+    ["2005-11", [6169920, 15424800, 21594720, 27764640]],
+    ["2006-01", [6960000, 17400000, 24360000, 31320000]],
+    ["2006-03", [7360010, 18400020, 25760030, 33120040]],
+    ["2007-01", [7440000, 18600000, 26040000, 33480000]],
+    ["2007-12", [7519992, 18799980, 26319972, 33839964]],
+    ["2008-01", [8400000, 21000000, 29400000, 37800000]],
+  ];
+
+  const SCALES = SCALES_OLD_RUB.map(([from, limits]) => ({
+    from,
+    limits: limits.map((value) => value / 10000),
+  }));
+
+  /* Первый месяц, с которого действует единая ставка (до него — шкала). */
+  const FLAT_START = FLAT_RATES[0].from;
 
   const MODE_NET = "net";
   const MODE_GROSS = "gross";
@@ -801,8 +875,118 @@ const Tax = (function () {
     /* без параметров */
   }
 
+  /* Единая ставка, действующая в месяце ym («2015-03»). */
+  function flatRateAt(ym) {
+    let rate = FLAT_RATES[0].rate;
+
+    FLAT_RATES.forEach((item) => {
+      if (ym >= item.from) rate = item.rate;
+    });
+
+    return rate;
+  }
+
+  /* Шкала, действующая в месяце ym (до первой записи — первая). */
+  function scaleAt(ym) {
+    let found = SCALES[0];
+
+    SCALES.forEach((item) => {
+      if (ym >= item.from) found = item;
+    });
+
+    return found;
+  }
+
+  /*
+   * Эффективная ставка шкалы для годового дохода base:
+   * налог по ступеням, делённый на доход.
+   */
+  function progressiveRate(base, limits) {
+    if (!(base > 0)) return SCALE_RATES[0];
+
+    let tax = 0;
+    let previous = 0;
+
+    for (let i = 0; i < limits.length; i++) {
+      if (base <= limits[i]) {
+        tax += (base - previous) * SCALE_RATES[i];
+
+        return tax / base;
+      }
+
+      tax += (limits[i] - previous) * SCALE_RATES[i];
+      previous = limits[i];
+    }
+
+    tax += (base - previous) * SCALE_RATES[SCALE_RATES.length - 1];
+
+    return tax / base;
+  }
+
+  /* Ставка подоходного налога последнего месяца (для верхних блоков). */
+  const CURRENT_RATE = FLAT_RATES[FLAT_RATES.length - 1].rate;
+  const CURRENT_FACTOR = (1 - PENSION_FUND) * (1 - CURRENT_RATE);
+
+  /*
+   * Коэффициенты «нетто / брутто» для каждого месяца ряда.
+   *
+   * values — месячный ряд зарплат ДО вычета в современных рублях
+   * (в том же порядке, что months); months — массив «ГГГГ-ММ».
+   * До 2009 года ставка зависит от размера зарплаты, поэтому она
+   * считается по самому ряду: годовой доход = среднее значение ряда
+   * за календарный год × 12 (после взноса в ФСЗН). С 2009 года ставка
+   * единая и от значений не зависит.
+   */
+  function factorsFor(values, months) {
+    const length = months.length;
+    const out = new Array(length);
+
+    /* Годовые средние нужны только для месяцев со шкалой. */
+    const yearSum = {};
+    const yearCount = {};
+
+    for (let i = 0; i < length; i++) {
+      if (months[i] >= FLAT_START) break;
+
+      const number = Number(values && values[i]);
+
+      if (values && values[i] != null && Number.isFinite(number)) {
+        const year = months[i].slice(0, 4);
+
+        yearSum[year] = (yearSum[year] || 0) + number;
+        yearCount[year] = (yearCount[year] || 0) + 1;
+      }
+    }
+
+    for (let i = 0; i < length; i++) {
+      const ym = months[i];
+      let rate;
+
+      if (ym >= FLAT_START) {
+        rate = flatRateAt(ym);
+      } else {
+        const year = ym.slice(0, 4);
+        const count = yearCount[year];
+        const base = count
+          ? (yearSum[year] / count) * 12 * (1 - PENSION_FUND)
+          : 0;
+
+        rate = progressiveRate(base, scaleAt(ym).limits);
+      }
+
+      out[i] = (1 - PENSION_FUND) * (1 - rate);
+    }
+
+    return out;
+  }
+
   return {
-    factor: FACTOR,
+    /* Коэффициент для последнего месяца (текущая ставка). */
+    factor: CURRENT_FACTOR,
+
+    currentRate: CURRENT_RATE,
+
+    factorsFor,
 
     getMode() {
       return mode;
@@ -812,11 +996,15 @@ const Tax = (function () {
       return mode === MODE_NET;
     },
 
-    /* Денежное значение зарплаты -> с учётом режима. */
+    /*
+     * Денежное значение зарплаты -> с учётом режима.
+     * Используется для верхних блоков (последний месяц), поэтому
+     * берётся ставка сегодняшнего дня.
+     */
     apply(value) {
       if (value == null || !isFinite(Number(value))) return value;
 
-      return mode === MODE_NET ? Number(value) * FACTOR : Number(value);
+      return mode === MODE_NET ? Number(value) * CURRENT_FACTOR : Number(value);
     },
 
     /* Короткая подпись для подзаголовков. */
@@ -856,8 +1044,11 @@ const Tax = (function () {
    Считаются из рядов data.json на лету. Входные ряды линейно
    интерполируются между публикациями (до первой и после последней
    точки не продлеваются). Зарплаты в индексах 4–6 учитывают режим
-   налогов Tax; в индексах 1–3 налоги сокращаются. Переключатель
-   валюты на индексы не влияет.
+   налогов Tax (ставка берётся для каждого месяца своя); в индексах
+   1–3 налоги сокращаются. Переключатель валюты на индексы не влияет.
+
+   taxInput — номер входного ряда, который является зарплатой:
+   по нему Tax считает коэффициент нетто/брутто каждого месяца.
 
    real[i] = true, если в этом месяце опубликованы все входные ряды;
    по нему график ставит маркеры и пометку «аппр.».
@@ -894,19 +1085,21 @@ const DERIVED_INDEX_DEFS = [
   {
     key: KEY.idxMedM2,
     order: 4,
-    label: "медианная ЗП Минск, м\u00B2",
-    unit: "м\u00B2",
+    label: "медианная ЗП Минск, м²",
+    unit: "м²",
     decimals: 2,
     inputs: [KEY.medMinsk, KEY.rate, KEY.realt1k],
+    taxInput: 0,
     calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
   },
   {
     key: KEY.idxAvgM2,
     order: 5,
-    label: "средняя ЗП Минск, м\u00B2",
-    unit: "м\u00B2",
+    label: "средняя ЗП Минск, м²",
+    unit: "м²",
     decimals: 2,
     inputs: [KEY.avgMinsk, KEY.rate, KEY.realt1k],
+    taxInput: 0,
     calc: (v, f) => (v[1] && v[2] ? (v[0] * f) / v[1] / v[2] : null),
   },
   {
@@ -916,6 +1109,7 @@ const DERIVED_INDEX_DEFS = [
     unit: "%",
     decimals: 0,
     inputs: [KEY.rentTs, KEY.rate, KEY.medMinsk],
+    taxInput: 2,
     calc: (v, f) => (v[2] ? ((v[0] * v[1]) / (v[2] * f)) * 100 : null),
   },
 ];
@@ -978,11 +1172,21 @@ function getDerivedData(meta) {
     const inputs = def.inputs.map((key) =>
       interpolateLinearPlain(DATA.series[key] || [], length)
     );
-    const factor = Tax.isNet() ? Tax.factor : 1;
+
+    /*
+     * Коэффициент «нетто / брутто» — свой для каждого месяца (ставка
+     * налога менялась). Считается по тому входному ряду, который
+     * является зарплатой.
+     */
+    const factors =
+      Tax.isNet() && def.taxInput != null
+        ? Tax.factorsFor(inputs[def.taxInput].vals, DATA.months)
+        : null;
 
     for (let i = 0; i < length; i++) {
       if (!inputs.every((input) => input.vals[i] != null)) continue;
 
+      const factor = factors ? factors[i] : 1;
       const value = def.calc(inputs.map((input) => input.vals[i]), factor);
 
       if (value != null && Number.isFinite(value)) {
@@ -1105,8 +1309,11 @@ function convertMonthlyCurrency(meta, currency) {
  * Месячные значения ряда для графиков: валюта + налоги.
  *
  * Зарплатные ряды в режиме «после вычета» умножаются на коэффициент
- * Tax (пересчёт в USD — деление на курс — от этого не меняется:
- * порядок операций не важен). Остальные ряды — как есть.
+ * нетто/брутто своего месяца (ставка налога менялась, до 2009 года
+ * она зависит ещё и от размера зарплаты — см. Tax). Пересчёт в USD
+ * (деление на курс) от этого не меняется: порядок операций не важен.
+ * Остальные ряды — как есть. Коэффициенты считаются по исходному
+ * ряду в BYN, до перевода в доллары.
  * Вызывается и основным графиком, и сезонностью.
  */
 function convertMonthlyValues(meta, currency) {
@@ -1116,7 +1323,13 @@ function convertMonthlyValues(meta, currency) {
     return values;
   }
 
-  return values.map((value) => Tax.apply(value));
+  const factors = Tax.factorsFor(getRawMonthlyValues(meta), DATA.months);
+
+  return values.map((value, index) => {
+    if (value == null || !Number.isFinite(Number(value))) return value;
+
+    return Number(value) * factors[index];
+  });
 }
 
 
@@ -1583,7 +1796,7 @@ function formatChartPercent(level) {
   });
 
   if (change > 0) return `+${text}%`;
-  if (change < 0) return `\u2212${text}%`;
+  if (change < 0) return `−${text}%`;
   return `${text}%`;
 }
 

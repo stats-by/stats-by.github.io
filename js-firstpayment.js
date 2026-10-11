@@ -3,6 +3,12 @@
    Сколько лет минчанин УЖЕ копил бы на первый взнос по ипотеке
    на хрущёвку. Самодостаточный модуль: читает data.json сам,
    с app.js не связан. Расчёт — чистая функция FirstPayment.calc().
+
+   Налоги: «после вычета» считается для КАЖДОГО месяца по ставке
+   того времени (Tax.factorsFor из js-core.js): ФСЗН 1% и подоходный
+   налог — до 2009 года прогрессивная шкала, 2009–2014 — 12%,
+   с 2015 — 13%. Накопления прошлых лет поэтому считаются с налогом
+   своего времени, а не сегодняшним.
    ============================================================ */
 (function () {
   "use strict";
@@ -12,7 +18,8 @@
     AREA: { 1: 33, 2: 50, 3: 65 },          /* м² по умолчанию для 1–3 комнат */
     RENT_FROM: 2017, RENT_TO: 2025,    /* период сравнения Realt и t-s.by */
     RENT_DISCOUNT: 0.2,                /* «аренда ниже рынка» */
-    TAX: (1 - 0.01) * (1 - 0.13),      /* всегда «после вычета»: ФСЗН 1% + подоходный 13% */
+    /* Налоги здесь не задаются: коэффициент нетто/брутто каждого месяца
+       приходит из Tax.factorsFor (js-core.js) и лежит в P.taxAvg / P.taxMed. */
     MIN_DOWN: 0.2,                     /* минимальный первоначальный взнос — 20% цены */
     BACKTEST_MONTHS: 36,               /* окно для коэффициента «медиана / средняя» */
     KEY: {
@@ -109,6 +116,11 @@
     var k = ratios.reduce(function (a, b) { return a + b; }, 0) / (ratios.length || 1);
     for (var t = L + 1; t <= end; t++) med[t] = k * avg[t];
 
+    /* Налоги: коэффициент «нетто / брутто» для КАЖДОГО месяца (ставка менялась со временем;
+       до 2009 года она зависит ещё и от размера зарплаты, поэтому считается по самому ряду). */
+    var taxAvg = Tax.factorsFor(avg, M);
+    var taxMed = Tax.factorsFor(med, M);
+
     var ppm = K.prices.map(function (key) {           /* $ за м² по числу комнат, последний месяц */
       var i = lastIdx(S[key], end);
       return i < 0 ? null : Number(S[key][i]);
@@ -132,6 +144,7 @@
     return {
       last: last,
       months: M, first: firstOf, end: end, rate: rate, refi: refi, med: med, bpm: bpm,
+      taxAvg: taxAvg, taxMed: taxMed,
       rentByn: rentUsd.map(function (v, i) { return v == null || !rate[i] ? 0 : v * rate[i]; }),
       avg: avg, rentK: rentK, rentN: ratios2.length, firstTs: M[firstTs],
       k: k, kN: ratios.length, lastMedian: M[L],
@@ -161,7 +174,13 @@
       var min = minAt(i);
       return inc(i) - s.bpm * people * min;
     }
-    function inc(i) { return (s.income === "avg" ? P.avg[i] : P.med[i]) * CFG.TAX * people; }
+    /* Доход после налогов в месяце i: зарплата месяца × коэффициент нетто/брутто ЭТОГО ЖЕ месяца.
+       Налог берётся только с дохода; расходы (БПМ) и аренда налогом не облагаются. */
+    function inc(i) {
+      var gross = s.income === "avg" ? P.avg[i] : P.med[i];
+      var k = s.income === "avg" ? P.taxAvg[i] : P.taxMed[i];
+      return gross * k * people;
+    }
     function minAt(i) { return P.bpm[i]; }
     function rentAt(i) { return s.rent ? P.rentByn[i] * (s.cheap ? 1 - CFG.RENT_DISCOUNT : 1) : 0; }
     for (t = start; t <= P.end; t++)
@@ -386,8 +405,8 @@
     }
     var minEnd = P.bpm[P.end];
     [1, 2, 3].forEach(function (n) { lab("fpRooms", n, fmt(P.ppm[n - 1]) + " USD/м²"); });
-    lab("fpIncome", "med", fmt(P.med[P.end] * CFG.TAX * people) + " BYN");
-    lab("fpIncome", "avg", fmt(P.avg[P.end] * CFG.TAX * people) + " BYN");
+    lab("fpIncome", "med", fmt(P.med[P.end] * P.taxMed[P.end] * people) + " BYN");
+    lab("fpIncome", "avg", fmt(P.avg[P.end] * P.taxAvg[P.end] * people) + " BYN");
     [1.5, 2, 2.5, 3].forEach(function (n) {
       lab("fpBpm", n, fmt(n * people * minEnd) + " BYN");
     });
@@ -449,8 +468,10 @@
         ", — средняя ЗП × " + fmt(P.k, 3) + ": средний коэффициент «медиана / средняя» за 3 года, " + P.kN + " точек)";
     root.querySelector("#fpNote").textContent =
       "Расчёт на " + fm(P.months[P.end]) + " (последний месяц с данными БПМ). Остальные данные — за последний доступный месяц: курс USD — " + fm(P.last.rate) +
-      ", цены м² — " + fm(P.last.price) + ", аренда — " + fm(P.last.rent) + ", средняя ЗП — " + fm(P.last.avg) + "; если за расчётный месяц данных нет, считаем, что они не изменились. Доход — " + incomeText + ". Расходы — " +
-      fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (бюджет прожиточного минимума на каждый месяц из данных сайта). Цена — средняя цена м² " + roomWord + " квартир Wikidom × площадь. " +
+      ", цены м² — " + fm(P.last.price) + ", аренда — " + fm(P.last.rent) + ", средняя ЗП — " + fm(P.last.avg) + "; если за расчётный месяц данных нет, считаем, что они не изменились. Доход — " + incomeText + ". " +
+      "Налоги в каждом месяце накопления — по ставке того времени: взнос ФСЗН 1% и подоходный налог (до 2009 года — прогрессивная шкала 9–30%, ставка зависит от размера зарплаты, " +
+      "в 2009–2014 годах — 12%, с 2015 года — 13%); стандартные и детские вычеты не учитываются. Расходы — " +
+      fmt(st.bpm, st.bpm % 1 ? 1 : 0) + " БПМ на человека (бюджет прожиточного минимума на каждый месяц из данных сайта), налогом не облагаются. Цена — средняя цена м² " + roomWord + " квартир Wikidom × площадь. " +
       "Аренда — всегда однокомнатная: данные t-s.by" + (st.cheap ? ", со скидкой " + CFG.RENT_DISCOUNT * 100 + "%" : "") + "; до " + fm(P.firstTs, true) +
       ", где их нет, — данные Realt, уменьшенные в " + fmt(P.rentK, 2) + " раза (средний разрыв Realt и t-s.by в " + CFG.RENT_FROM + "–" + CFG.RENT_TO + ", " +
       P.rentN + " месяцев). Взнос подобран так, чтобы платёж по кредиту " +
