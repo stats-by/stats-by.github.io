@@ -196,7 +196,12 @@ function buildSeries() {
 
   const metas = getSeriesMeta();
 
-  const visibleMetas = metas.filter(
+  /*
+   * Порядок рядов — тот же, что в панели показателей (группа, порядок
+   * из xlsx). От него зависит порядок строк в тултипе. Цвет по-прежнему
+   * берётся по исходному индексу (metas.indexOf), поэтому не меняется.
+   */
+  const visibleMetas = sortMetas(metas).filter(
     (meta) => state.visible[meta.key]
   );
 
@@ -691,6 +696,20 @@ function buildTooltipFormatter(params) {
   if (!validParams.length) {
     return "";
   }
+
+  /*
+   * Строки тултипа — в том же порядке, что и в панели показателей
+   * (группа, затем порядок из xlsx), а не в порядке рядов в data.json.
+   */
+  const orderIndex = new Map(
+    sortMetas(getSeriesMeta()).map((meta, index) => [meta.key, index])
+  );
+
+  validParams.sort(
+    (a, b) =>
+      (orderIndex.get(a.seriesId) ?? 9999) -
+      (orderIndex.get(b.seriesId) ?? 9999)
+  );
 
   const hasActive = Boolean(
     activeId &&
