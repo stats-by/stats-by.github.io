@@ -1089,3 +1089,35 @@ input[type="checkbox"]:focus-visible {
   /* «до / после вычета» на телефоне не пишем — режим виден в переключателе сверху */
   .salary-tax { display: none; }
 }
+
+
+/* ============================================================
+   Кнопка «?» у прогноза курса: проверка прогнозов за 12 месяцев
+   ============================================================ */
+.info-btn-q {
+  font-family: var(--font-ui);
+  font-style: normal;
+}
+
+.info-tip-bt { max-width: min(320px, 86vw); }
+
+.bt-table {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 2px 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.bt-table > span { text-align: right; white-space: nowrap; line-height: 1.4; }
+.bt-table > span:nth-child(3n+1) { text-align: left; }
+.bt-table .is-up { color: var(--up); }
+.bt-table .is-down { color: var(--down); }
+.bt-head { font-size: 12px; color: var(--text-tertiary); }
+
+.bt-sum {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-subtle);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}

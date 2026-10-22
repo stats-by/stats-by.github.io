@@ -379,13 +379,8 @@ function updateDataUpTo() {
  * Годы не из расчёта в подсказке показываются зачёркнутыми.
  * Список изменений — от новых лет к старым.
  */
-function computeRateForecast() {
-  const values = DATA.series[RATE_KEY];
-
-  if (!Array.isArray(values)) {
-    return null;
-  }
-
+/* Индекс базового месяца: прошлый календарный месяц или последний с данными. */
+function getRateBaseIdx(values) {
   const now = new Date();
   const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1);
   const prevKey =
@@ -401,10 +396,16 @@ function computeRateForecast() {
     baseIdx--;
   }
 
-  if (baseIdx < 0) {
-    return null;
-  }
+  return baseIdx;
+}
 
+
+/*
+ * Изменения «базовый месяц -> следующий» за прошлые годы (только годы
+ * раньше базового месяца, т.е. данные, известные на тот момент).
+ * Порядок — от старых лет к новым.
+ */
+function collectRateChanges(values, baseIdx) {
   const baseMonthNumber = Number(DATA.months[baseIdx].slice(5, 7));
   const changes = [];
 
@@ -428,6 +429,26 @@ function computeRateForecast() {
     });
   }
 
+  return changes;
+}
+
+
+function computeRateForecast() {
+  const values = DATA.series[RATE_KEY];
+
+  if (!Array.isArray(values)) {
+    return null;
+  }
+
+  const baseIdx = getRateBaseIdx(values);
+
+  if (baseIdx < 0) {
+    return null;
+  }
+
+  const baseMonthNumber = Number(DATA.months[baseIdx].slice(5, 7));
+  const changes = collectRateChanges(values, baseIdx);
+
   changes.reverse();
 
   const counted = changes.filter((item) => !item.excluded);
@@ -448,6 +469,107 @@ function computeRateForecast() {
     median: med,
     forecastValue: baseValue * (1 + med / 100),
   };
+}
+
+
+/*
+ * Проверка прогнозов: для каждого из последних 12 месяцев с известным
+ * курсом считаем прогноз так, как он считался бы ПЕРЕД этим месяцем
+ * (по данным предыдущих лет), и сравниваем с фактическим изменением
+ * курса к предыдущему месяцу. Строки — от новых к старым.
+ */
+function computeRateBacktest(count) {
+  const values = DATA.series[RATE_KEY];
+
+  if (!Array.isArray(values)) {
+    return [];
+  }
+
+  const lastIdx = getRateBaseIdx(values);
+  const rows = [];
+
+  for (let t = lastIdx; t > lastIdx - count && t >= 1; t--) {
+    const b = t - 1;
+
+    if (!isNum(values[b]) || !isNum(values[t]) || Number(values[b]) === 0) {
+      continue;
+    }
+
+    const counted = collectRateChanges(values, b).filter(
+      (item) => !item.excluded
+    );
+    const med = median(counted.map((item) => item.pct));
+
+    if (med == null) continue;
+
+    rows.push({
+      month: DATA.months[t],
+      forecast: med,
+      actual: (Number(values[t]) / Number(values[b]) - 1) * 100,
+    });
+  }
+
+  return rows;
+}
+
+
+function renderRateBacktest() {
+  const tip = document.getElementById("rateBtTip");
+
+  if (!tip) return;
+
+  const rows = computeRateBacktest(12);
+
+  tip.innerHTML = "";
+
+  const title = document.createElement("div");
+  title.className = "info-tip-title";
+  title.textContent =
+    "прогноз и факт за последние 12 месяцев " +
+    "(прогноз — по данным, известным на тот момент):";
+  tip.appendChild(title);
+
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.textContent = "Недостаточно данных";
+    tip.appendChild(empty);
+    return;
+  }
+
+  const table = document.createElement("div");
+  table.className = "bt-table";
+
+  const cell = (text, cls) => {
+    const el = document.createElement("span");
+    el.textContent = text;
+    if (cls) el.className = cls;
+    table.appendChild(el);
+  };
+
+  cell("", "bt-head");
+  cell("прогноз", "bt-head");
+  cell("факт", "bt-head");
+
+  rows.forEach((row) => {
+    cell(fmtMonthRu(row.month).toLowerCase());
+    cell(formatPercentChange(100 + row.forecast), pctClass(row.forecast));
+    cell(formatPercentChange(100 + row.actual), pctClass(row.actual));
+  });
+
+  tip.appendChild(table);
+
+  const sign = (x) => Math.sign(Math.round(x * 10) / 10);
+  const hits = rows.filter((r) => sign(r.forecast) === sign(r.actual)).length;
+  const mae =
+    rows.reduce((sum, r) => sum + Math.abs(r.forecast - r.actual), 0) /
+    rows.length;
+
+  const sum = document.createElement("div");
+  sum.className = "bt-sum";
+  sum.textContent =
+    `направление угадано: ${hits} из ${rows.length}; ` +
+    `средняя ошибка: ${formatNumber(mae, 1)} п.п.`;
+  tip.appendChild(sum);
 }
 
 
@@ -518,6 +640,9 @@ function renderRateBlock() {
   });
 
   wireInfoTip("rateInfoWrap", "rateInfoBtn", "rateInfoTip");
+
+  renderRateBacktest();
+  wireInfoTip("rateBtWrap", "rateBtBtn", "rateBtTip");
 }
 
 
